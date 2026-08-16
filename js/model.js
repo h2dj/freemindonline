@@ -1,10 +1,12 @@
 // Core mind-map data model: plain tree of nodes plus mutation helpers.
 // A node looks like:
-// { id, text, children: [Node], collapsed, color, side: 'left'|'right'|null, parent: Node|null, isRoot }
+// { id, text, children: [Node], collapsed, color, side: 'left'|'right'|null,
+//   parent: Node|null, isRoot, cloud: colorString|null, link: string|null,
+//   icons: string[] }
 // `parent` is a live back-reference used only at runtime; it is stripped
 // when serializing (see toPlain/fromPlain) so the tree stays JSON-safe.
 
-function makeId() {
+export function makeId() {
   return 'n-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
@@ -18,6 +20,9 @@ export function createNode(text, parent, side) {
     side: side || null,
     parent: parent || null,
     isRoot: false,
+    cloud: null,
+    link: null,
+    icons: [],
   };
 }
 
@@ -173,6 +178,36 @@ export function toggleCollapse(node) {
   if (node.children.length) node.collapsed = !node.collapsed;
 }
 
+// ---------- Chapter 3: clouds, hyperlinks, icons ----------
+
+export function setCloud(node, color) {
+  node.cloud = color || null;
+}
+
+export function setLink(node, url) {
+  node.link = url ? url.trim() || null : null;
+}
+
+export function addIcon(node, icon) {
+  node.icons.push(icon);
+}
+
+export function removeLastIcon(node) {
+  node.icons.pop();
+}
+
+export function clearIcons(node) {
+  node.icons.length = 0;
+}
+
+// All node ids in `node`'s own subtree (including itself) — used to prune
+// graphical links that reference a node about to be deleted.
+export function collectSubtreeIds(node, out = []) {
+  out.push(node.id);
+  node.children.forEach((c) => collectSubtreeIds(c, out));
+  return out;
+}
+
 export function forEachNode(root, fn) {
   fn(root);
   root.children.forEach((c) => forEachNode(c, fn));
@@ -218,6 +253,9 @@ export function toPlain(node) {
     color: node.color || null,
     side: node.side || null,
     isRoot: !!node.isRoot,
+    cloud: node.cloud || null,
+    link: node.link || null,
+    icons: node.icons.slice(),
     children: node.children.map(toPlain),
   };
 }
@@ -232,6 +270,9 @@ export function fromPlain(plain, parent = null) {
     side: plain.side || null,
     parent,
     isRoot: !!plain.isRoot,
+    cloud: plain.cloud || null,
+    link: plain.link || null,
+    icons: Array.isArray(plain.icons) ? plain.icons.slice() : [],
   };
   node.children = (plain.children || []).map((c) => fromPlain(c, node));
   return node;

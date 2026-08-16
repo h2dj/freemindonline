@@ -1,8 +1,9 @@
 import {
   createDefaultRoot, addChild, addSiblingAfter, deleteSubtree, toggleCollapse,
-  reparentNode, findNode, moveSelectionHorizontal,
+  reparentNode, findNode, moveSelectionHorizontal, makeId,
   reorderNode, canReorderNode, promoteNode, canPromoteNode, demoteNode, canDemoteNode,
   flipRootChildSide, canFlipRootChildSide,
+  setCloud, setLink, addIcon, removeLastIcon, clearIcons, collectSubtreeIds,
   toPlain, fromPlain, countDescendants,
 } from './model.js';
 import { render, nextVisibleSameSide } from './render.js';
@@ -10,21 +11,36 @@ import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interac
 import { autosave, loadAutosaved, downloadJSON, parseJSONFile, exportMM, parseMM } from './io.js';
 import { createHistory } from './undo.js';
 
+const CLOUD_COLORS = ['#c9d6e3', '#fde68a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fecaca'];
+const LINK_COLORS = ['#f97316', '#2563eb', '#16a34a', '#db2777', '#64748b'];
+const ICON_PALETTE = ['⭐', '❗', '❓', '✅', '❌', '⚠️', '💡', '📌', '🚩', '❤️', '⏰', '🔥', '👍', '👎', '🔒', '📎', '🎯', '🏆'];
+
+const loaded = loadAutosaved();
 const state = {
-  root: loadAutosaved() || createDefaultRoot(),
+  root: loaded ? loaded.root : createDefaultRoot(),
+  graphicalLinks: loaded ? loaded.graphicalLinks : [],
   selectedId: null,
   editingId: null,
+  linkSourceId: null,
+  selectedLinkId: null,
   pan: { x: 0, y: 0 },
   zoom: 1,
 };
 state.selectedId = state.root.id;
 
 const history = createHistory(
-  () => ({ plain: toPlain(state.root), selectedId: state.selectedId }),
+  () => ({
+    plain: toPlain(state.root),
+    selectedId: state.selectedId,
+    links: state.graphicalLinks.map((l) => ({ ...l })),
+  }),
   (snap) => {
     state.root = fromPlain(snap.plain);
     state.selectedId = snap.selectedId;
+    state.graphicalLinks = (snap.links || []).map((l) => ({ ...l }));
     state.editingId = null;
+    state.linkSourceId = null;
+    state.selectedLinkId = null;
     rerenderAll();
   },
 );
@@ -47,6 +63,24 @@ function updateUndoRedoButtons() {
   document.getElementById('btn-redo').disabled = !history.canRedo();
 }
 
+// Positions a popup (context menu / icon picker) at (x, y) but keeps it
+// fully inside the viewport, so long menus near an edge don't render
+// partly off-screen and become unreachable by mouse/touch.
+function positionPopup(el, x, y) {
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  const margin = 6;
+  const rect = el.getBoundingClientRect();
+  let left = x;
+  let top = y;
+  if (rect.right > window.innerWidth - margin) left -= rect.right - (window.innerWidth - margin);
+  if (rect.bottom > window.innerHeight - margin) top -= rect.bottom - (window.innerHeight - margin);
+  left = Math.max(margin, left);
+  top = Math.max(margin, top);
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+}
+
 let toastTimer = null;
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -60,7 +94,7 @@ function rerenderAll() {
   render(state);
   applyTransform();
   updateUndoRedoButtons();
-  autosave(state.root);
+  autosave(state.root, state.graphicalLinks);
 }
 
 const ctx = {
@@ -104,7 +138,12 @@ const ctx = {
     if (!n.parent) { toast('루트 노드는 삭제할 수 없습니다.'); return; }
     if (n.children.length && !confirm(`"${n.text}" 노드와 하위 ${countDescendants(n)}개 노드를 삭제할까요?`)) return;
     history.push();
+    const removedIds = new Set(collectSubtreeIds(n));
     const parent = deleteSubtree(n);
+    state.graphicalLinks = state.graphicalLinks.filter((l) => !removedIds.has(l.fromId) && !removedIds.has(l.toId));
+    if (state.selectedLinkId && !state.graphicalLinks.some((l) => l.id === state.selectedLinkId)) {
+      state.selectedLinkId = null;
+    }
     state.selectedId = parent ? parent.id : state.root.id;
     rerenderAll();
   },
@@ -204,7 +243,164 @@ const ctx = {
   redo() { if (history.redo()) toast('다시 실행됨'); },
   applyTransform,
 
-  saveJSON() { downloadJSON(state.root); toast('JSON 파일로 저장했습니다.'); },
+  saveJSON() { downloadJSON(state.root, state.graphicalLinks); toast('JSON 파일로 저장했습니다.'); },
+
+  // ---------- Chapter 3: clouds ----------
+  addCloud(id) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    history.push();
+    setCloud(n, CLOUD_COLORS[0]);
+    rerenderAll();
+  },
+  cycleCloudColor(id) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    const idx = CLOUD_COLORS.indexOf(n.cloud);
+    history.push();
+    setCloud(n, CLOUD_COLORS[(idx + 1) % CLOUD_COLORS.length]);
+    rerenderAll();
+  },
+  removeCloud(id) {
+    const n = findNode(state.root, id);
+    if (!n || !n.cloud) return;
+    history.push();
+    setCloud(n, null);
+    rerenderAll();
+  },
+
+  // ---------- Chapter 3: hyperlinks ----------
+  setLinkPrompt(id) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    const url = window.prompt('링크(URL, mailto:...) 를 입력하세요. 비워두고 확인하면 링크가 제거됩니다.', n.link || '');
+    if (url === null) return; // cancelled
+    history.push();
+    setLink(n, url);
+    rerenderAll();
+  },
+  removeLink(id) {
+    const n = findNode(state.root, id);
+    if (!n || !n.link) return;
+    history.push();
+    setLink(n, null);
+    rerenderAll();
+  },
+  openLink(id) {
+    const n = findNode(state.root, id);
+    if (!n || !n.link) return;
+    window.open(n.link, '_blank', 'noopener');
+  },
+
+  // ---------- Chapter 3: icons ----------
+  showIconPicker(id, x, y) {
+    const picker = document.getElementById('icon-picker');
+    picker.innerHTML = '';
+    ICON_PALETTE.forEach((icon) => {
+      const btn = document.createElement('button');
+      btn.textContent = icon;
+      btn.onclick = (e) => { e.stopPropagation(); this.addIconTo(id, icon); this.hideIconPicker(); };
+      picker.appendChild(btn);
+    });
+    picker.classList.remove('hidden');
+    positionPopup(picker, x, y);
+  },
+  hideIconPicker() {
+    document.getElementById('icon-picker').classList.add('hidden');
+  },
+  addIconTo(id, icon) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    history.push();
+    addIcon(n, icon);
+    rerenderAll();
+  },
+  removeLastIcon(id) {
+    const n = findNode(state.root, id);
+    if (!n || !n.icons.length) return;
+    history.push();
+    removeLastIcon(n);
+    rerenderAll();
+  },
+  clearIcons(id) {
+    const n = findNode(state.root, id);
+    if (!n || !n.icons.length) return;
+    history.push();
+    clearIcons(n);
+    rerenderAll();
+  },
+
+  // ---------- Chapter 3: graphical links ----------
+  startLinkMode(id) {
+    state.linkSourceId = id;
+    toast('연결할 다른 노드를 우클릭(또는 롱프레스)해서 "여기로 연결"을 선택하세요. Esc로 취소.');
+    render(state);
+  },
+  cancelLinkMode() {
+    if (!state.linkSourceId) return;
+    state.linkSourceId = null;
+    render(state);
+  },
+  completeLinkMode(targetId) {
+    if (!state.linkSourceId || state.linkSourceId === targetId) { this.cancelLinkMode(); return; }
+    history.push();
+    state.graphicalLinks.push({ id: makeId(), fromId: state.linkSourceId, toId: targetId, color: null, arrows: 'end' });
+    state.linkSourceId = null;
+    rerenderAll();
+  },
+  selectGraphicalLink(id) {
+    state.selectedLinkId = id;
+    render(state);
+  },
+  showLinkContextMenu(id, x, y) {
+    const link = state.graphicalLinks.find((l) => l.id === id);
+    if (!link) return;
+    state.selectedLinkId = id;
+    render(state);
+    const menu = document.getElementById('context-menu');
+    menu.innerHTML = '';
+    const items = [
+      ['🎨 색상 변경', () => this.cycleLinkColor(id)],
+      ['↔ 화살표 스타일 변경', () => this.cycleLinkArrows(id)],
+      ['🗑 링크 삭제', () => this.deleteGraphicalLink(id)],
+    ];
+    items.forEach(([label, fn]) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.onclick = (e) => { e.stopPropagation(); fn(); this.hideContextMenu(); };
+      menu.appendChild(btn);
+    });
+    menu.classList.remove('hidden');
+    positionPopup(menu, x, y);
+  },
+  cycleLinkColor(id) {
+    const link = state.graphicalLinks.find((l) => l.id === id);
+    if (!link) return;
+    // An unset color renders as LINK_COLORS[0] (see DEFAULT_LINK_COLOR in
+    // render.js), so index from there — otherwise the first click would be
+    // a no-visible-op, landing back on the same color the link already has.
+    const idx = LINK_COLORS.indexOf(link.color || LINK_COLORS[0]);
+    history.push();
+    link.color = LINK_COLORS[(idx + 1) % LINK_COLORS.length];
+    rerenderAll();
+  },
+  cycleLinkArrows(id) {
+    const link = state.graphicalLinks.find((l) => l.id === id);
+    if (!link) return;
+    const order = ['end', 'both', 'none'];
+    const idx = order.indexOf(link.arrows || 'end');
+    history.push();
+    link.arrows = order[(idx + 1) % order.length];
+    rerenderAll();
+  },
+  deleteGraphicalLink(id) {
+    const idx = state.graphicalLinks.findIndex((l) => l.id === id);
+    if (idx < 0) return;
+    history.push();
+    state.graphicalLinks.splice(idx, 1);
+    if (state.selectedLinkId === id) state.selectedLinkId = null;
+    rerenderAll();
+  },
 
   showContextMenu(id, x, y) {
     const menu = document.getElementById('context-menu');
@@ -222,16 +418,38 @@ const ctx = {
     if (canPromoteNode(n)) items.push(['◀ 상위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
     else if (canFlipRootChildSide(n)) items.push(['⇄ 반대편으로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
     if (canDemoteNode(n)) items.push(['▶ 하위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'left' : 'right')]);
-    if (n.parent) items.push(['🗑 삭제', () => this.deleteSelected()]);
+
+    if (!n.cloud) items.push(['☁ 구름 추가', () => this.addCloud(id)]);
+    else {
+      items.push(['☁ 구름 색상 변경', () => this.cycleCloudColor(id)]);
+      items.push(['☁ 구름 제거', () => this.removeCloud(id)]);
+    }
+
+    if (!n.link) items.push(['🔗 링크 추가', () => this.setLinkPrompt(id)]);
+    else {
+      items.push(['🔗 링크 열기', () => this.openLink(id)]);
+      items.push(['🔗 링크 변경/제거', () => this.setLinkPrompt(id)]);
+    }
+
+    items.push(['😀 아이콘 추가', () => { this.hideContextMenu(); this.showIconPicker(id, x, y); }]);
+    if (n.icons.length) {
+      items.push(['🗑 마지막 아이콘 제거', () => this.removeLastIcon(id)]);
+      items.push(['🗑 아이콘 모두 제거', () => this.clearIcons(id)]);
+    }
+
+    if (state.linkSourceId === id) items.push(['↗ 그래픽 링크 시작 취소', () => this.cancelLinkMode()]);
+    else if (state.linkSourceId) items.push(['↗ 여기로 그래픽 링크 연결', () => this.completeLinkMode(id)]);
+    else items.push(['↗ 그래픽 링크 시작', () => this.startLinkMode(id)]);
+
+    if (n.parent) items.push(['🗑 노드 삭제', () => this.deleteSelected()]);
     items.forEach(([label, fn]) => {
       const btn = document.createElement('button');
       btn.textContent = label;
       btn.onclick = (e) => { e.stopPropagation(); fn(); this.hideContextMenu(); };
       menu.appendChild(btn);
     });
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
     menu.classList.remove('hidden');
+    positionPopup(menu, x, y);
   },
 
   hideContextMenu() {
@@ -263,6 +481,9 @@ document.getElementById('btn-new').onclick = () => {
   if (!confirm('새 마인드맵을 만들까요? 저장하지 않은 변경사항은 사라집니다.')) return;
   history.push();
   state.root = createDefaultRoot();
+  state.graphicalLinks = [];
+  state.linkSourceId = null;
+  state.selectedLinkId = null;
   state.selectedId = state.root.id;
   rerenderAll();
   centerOnRoot();
@@ -278,7 +499,11 @@ document.getElementById('file-input').onchange = (e) => {
   reader.onload = () => {
     try {
       history.push();
-      state.root = parseJSONFile(reader.result);
+      const parsed = parseJSONFile(reader.result);
+      state.root = parsed.root;
+      state.graphicalLinks = parsed.graphicalLinks;
+      state.linkSourceId = null;
+      state.selectedLinkId = null;
       state.selectedId = state.root.id;
       rerenderAll();
       centerOnRoot();
@@ -291,7 +516,7 @@ document.getElementById('file-input').onchange = (e) => {
   e.target.value = '';
 };
 
-document.getElementById('btn-export-mm').onclick = () => { exportMM(state.root); toast('.mm 파일로 내보냈습니다.'); };
+document.getElementById('btn-export-mm').onclick = () => { exportMM(state.root, state.graphicalLinks); toast('.mm 파일로 내보냈습니다.'); };
 document.getElementById('btn-import-mm').onclick = () => document.getElementById('mm-input').click();
 document.getElementById('mm-input').onchange = (e) => {
   const file = e.target.files[0];
@@ -300,7 +525,11 @@ document.getElementById('mm-input').onchange = (e) => {
   reader.onload = () => {
     try {
       history.push();
-      state.root = parseMM(reader.result);
+      const parsed = parseMM(reader.result);
+      state.root = parsed.root;
+      state.graphicalLinks = parsed.graphicalLinks;
+      state.linkSourceId = null;
+      state.selectedLinkId = null;
       state.selectedId = state.root.id;
       rerenderAll();
       centerOnRoot();

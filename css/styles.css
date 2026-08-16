@@ -116,12 +116,20 @@ body {
   will-change: transform;
 }
 
-#edges {
+#clouds,
+#edges,
+#glinks {
   position: absolute;
   left: 0;
   top: 0;
   overflow: visible;
   pointer-events: none;
+}
+
+.cloud {
+  fill-opacity: .28;
+  stroke-opacity: .5;
+  stroke-width: 2;
 }
 
 .edge {
@@ -135,6 +143,24 @@ body {
   position: absolute;
   left: 0;
   top: 0;
+}
+
+/* Chapter 3: graphical links — arbitrary arrows between any two nodes */
+.glink {
+  fill: none;
+  stroke-width: 2.5;
+  opacity: .85;
+}
+.glink.selected {
+  stroke-width: 4;
+  opacity: 1;
+}
+.glink-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16px;
+  pointer-events: stroke;
+  cursor: pointer;
 }
 
 /* ---------- Node ---------- */
@@ -178,6 +204,39 @@ body {
 
 .node-box.collapsed {
   border-style: dashed;
+}
+
+.node-box.link-source {
+  outline: 2px dashed #f97316;
+  outline-offset: 2px;
+}
+
+.node-box.has-link {
+  cursor: pointer;
+}
+
+.node-icons {
+  display: inline;
+  margin-right: 4px;
+  font-size: 1em;
+}
+
+.link-badge {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #f97316;
+  font-size: 10px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .node-text {
@@ -257,6 +316,20 @@ body {
 }
 .context-menu button:hover { background: #eef2f8; }
 
+#icon-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  min-width: unset;
+}
+#icon-picker.hidden { display: none; }
+#icon-picker button {
+  font-size: 18px;
+  padding: 6px;
+  text-align: center;
+  border-radius: 6px;
+}
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed;
@@ -269,6 +342,7 @@ body {
   border-radius: 20px;
   font-size: 13px;
   z-index: 1000;
+  pointer-events: none;
   transition: opacity .2s;
 }
 .toast.hidden { display: none; }
@@ -340,6 +414,19 @@ body {
     padding: 11px 14px;
     min-height: 44px;
     font-size: 14px;
+  }
+
+  #icon-picker button {
+    font-size: 22px;
+    padding: 8px;
+  }
+
+  .link-badge {
+    width: 24px;
+    height: 24px;
+    font-size: 13px;
+    top: -10px;
+    left: -10px;
   }
 
   .toast {
