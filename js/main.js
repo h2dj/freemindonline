@@ -463,10 +463,10 @@ const ctx = {
       items.push(['☁ 구름 제거', () => this.removeCloud(id)]);
     }
 
-    if (!n.link) items.push(['🔗 링크 추가', () => this.setLinkPrompt(id)]);
+    if (!n.link) items.push(['🔗 링크 추가 (Ctrl+K)', () => this.setLinkPrompt(id)]);
     else {
       items.push(['🔗 링크 열기', () => this.openLink(id)]);
-      items.push(['🔗 링크 변경/제거', () => this.setLinkPrompt(id)]);
+      items.push(['🔗 링크 변경/제거 (Ctrl+K)', () => this.setLinkPrompt(id)]);
     }
 
     items.push(['😀 아이콘 추가', () => { this.hideContextMenu(); this.showIconPicker(id, x, y); }]);
@@ -492,6 +492,24 @@ const ctx = {
 
   hideContextMenu() {
     document.getElementById('context-menu').classList.add('hidden');
+  },
+
+  // ---------- Hamburger menu (rarely-used actions: file I/O, settings) ----------
+  showFileMenu() {
+    const menu = document.getElementById('file-menu');
+    const btn = document.getElementById('btn-menu');
+    const rect = btn.getBoundingClientRect();
+    menu.classList.remove('hidden');
+    positionPopup(menu, rect.left, rect.bottom + 6);
+    btn.setAttribute('aria-expanded', 'true');
+  },
+  hideFileMenu() {
+    document.getElementById('file-menu').classList.add('hidden');
+    document.getElementById('btn-menu').setAttribute('aria-expanded', 'false');
+  },
+  toggleFileMenu() {
+    const hidden = document.getElementById('file-menu').classList.contains('hidden');
+    if (hidden) this.showFileMenu(); else this.hideFileMenu();
   },
 
   setColor(color) {
@@ -628,6 +646,13 @@ document.getElementById('mm-input').onchange = (e) => {
 
 document.querySelectorAll('#color-group .swatch').forEach((btn) => {
   btn.onclick = () => ctx.setColor(btn.dataset.color || null);
+});
+
+document.getElementById('btn-menu').onclick = (e) => { e.stopPropagation(); ctx.toggleFileMenu(); };
+// Any action button inside the menu should close it after running, same as
+// how the context menu auto-closes once an item is picked.
+document.getElementById('file-menu').addEventListener('click', (e) => {
+  if (e.target.tagName === 'BUTTON') ctx.hideFileMenu();
 });
 
 document.getElementById('btn-print').onclick = () => ctx.printMap();

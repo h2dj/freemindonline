@@ -153,6 +153,7 @@ export function setupCanvasInteractions(state, ctx) {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#context-menu')) ctx.hideContextMenu();
     if (!e.target.closest('#icon-picker')) ctx.hideIconPicker();
+    if (!e.target.closest('#file-menu') && !e.target.closest('#btn-menu')) ctx.hideFileMenu();
   });
 
   // ---------- Touch: one-finger pan/select/drag, two-finger pinch-zoom,
@@ -362,6 +363,10 @@ export function setupKeyboard(state, ctx) {
       ctx.printMap(); e.preventDefault(); return;
     }
     if (!state.selectedId) return;
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      ctx.setLinkPrompt(state.selectedId); e.preventDefault(); return;
+    }
 
     if (e.ctrlKey) {
       switch (e.key) {
