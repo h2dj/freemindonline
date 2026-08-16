@@ -29,5 +29,8 @@ export function createHistory(getSnapshot, applySnapshot, limit = 100) {
     },
     canUndo() { return undoStack.length > 0; },
     canRedo() { return redoStack.length > 0; },
+    // Drops the most recent push() without applying it — for callers that
+    // speculatively push() before an action which may turn out to be a no-op.
+    discardLast() { undoStack.pop(); },
   };
 }
