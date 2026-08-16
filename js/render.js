@@ -10,23 +10,40 @@ export function collectVisible(node, arr) {
   if (!node.collapsed) node.children.forEach((c) => collectVisible(c, arr));
 }
 
-// Arrow-key Up/Down navigation: moves to the next/previous node on the same
-// side in *screen order* (by rendered y), not strictly among literal
-// siblings — so reaching the end of one branch's children continues into
-// whatever's visually next below/above (a cousin, an aunt/uncle's branch,
-// etc), matching how the tree actually looks on screen. Relies on x/y from
-// the most recent computeLayout() call (see render() below).
+// Depth-first reading order, restricted to one side of the root and to
+// currently-visible nodes (a collapsed node hides its children from this
+// walk, same as it hides them on screen) — top-level branches on that side
+// in their stacking order, each followed immediately by its own subtree.
+function collectSideInOrder(root, side, out) {
+  function visit(n) {
+    out.push(n);
+    if (!n.collapsed) n.children.forEach(visit);
+  }
+  const topKids = root.collapsed ? [] : root.children.filter((c) => (c.side || 'right') === side);
+  topKids.forEach(visit);
+}
+
+// Arrow-key Up/Down navigation: steps forward/backward through
+// collectSideInOrder's flattened list. This used to sort all same-side
+// nodes by their raw rendered y instead — but a parent's y is the
+// *vertical center of its own children*, which routinely lands exactly on
+// (or between) them, so that approach would just as often hop from a node
+// to its own parent/ancestor — a large, confusing jump sideways toward the
+// root — as it would move to a true visual neighbor, and tie-breaking
+// between coincident y values could skip nodes entirely depending on
+// insertion order. A plain array-index walk has none of that: every node
+// on a side appears in the list exactly once, so nothing is ever
+// unreachable, and stepping +1 then -1 (or vice versa) always lands back
+// where it started.
 export function nextVisibleSameSide(root, node, dir) {
   if (!node.parent) return node; // root has no vertical peers
-  const all = [];
-  collectVisible(root, all);
-  const sameSide = all.filter((n) => !n.isRoot && n.side === node.side);
-  sameSide.sort((a, b) => a.y - b.y);
-  const idx = sameSide.indexOf(node);
+  const list = [];
+  collectSideInOrder(root, node.side, list);
+  const idx = list.indexOf(node);
   if (idx < 0) return node;
   const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= sameSide.length) return node;
-  return sameSide[newIdx];
+  if (newIdx < 0 || newIdx >= list.length) return node;
+  return list[newIdx];
 }
 
 const CLOUD_PAD = 14;
