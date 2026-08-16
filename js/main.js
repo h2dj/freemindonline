@@ -8,12 +8,22 @@ import {
 } from './model.js';
 import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
-import { autosave, loadAutosaved, downloadJSON, parseJSONFile, exportMM, parseMM, exportPNG } from './io.js';
+import { autosave, loadAutosaved, downloadJSON, parseJSONFile, exportMM, parseMM, exportPNG, printMap } from './io.js';
 import { createHistory } from './undo.js';
+import {
+  loadSettings, saveSettings, applySettings,
+  NODE_COLOR_PRESETS, ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS,
+} from './settings.js';
 
 const CLOUD_COLORS = ['#c9d6e3', '#fde68a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fecaca'];
 const LINK_COLORS = ['#f97316', '#2563eb', '#16a34a', '#db2777', '#64748b'];
 const ICON_PALETTE = ['⭐', '❗', '❓', '✅', '❌', '⚠️', '💡', '📌', '🚩', '❤️', '⏰', '🔥', '👍', '👎', '🔒', '📎', '🎯', '🏆'];
+
+// App-level preferences (font size / default colors) — separate from the
+// map document itself, applied once up front so the very first layout
+// pass already measures nodes at the right font size.
+let settings = loadSettings();
+applySettings(settings);
 
 const loaded = loadAutosaved();
 const state = {
@@ -23,6 +33,7 @@ const state = {
   editingId: null,
   linkSourceId: null,
   selectedLinkId: null,
+  settingsOpen: false,
   pan: { x: 0, y: 0 },
   zoom: 1,
 };
@@ -88,6 +99,33 @@ function toast(msg) {
   el.classList.remove('hidden');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.add('hidden'), 1800);
+}
+
+function renderSwatchRow(containerId, presets, currentValue, onPick) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  presets.forEach((preset) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'swatch' + (preset.value === currentValue ? ' active' : '');
+    btn.style.background = preset.value;
+    btn.title = preset.label;
+    btn.onclick = () => onPick(preset);
+    el.appendChild(btn);
+  });
+}
+
+function refreshSettingsUI() {
+  document.getElementById('setting-font-size').value = settings.fontSize;
+  document.getElementById('setting-font-size-value').textContent = settings.fontSize + 'px';
+  renderSwatchRow('setting-node-color', NODE_COLOR_PRESETS, settings.nodeBg, (preset) => {
+    ctx.setSetting({ nodeBg: preset.value });
+    refreshSettingsUI();
+  });
+  renderSwatchRow('setting-accent-color', ACCENT_COLOR_PRESETS, settings.accent, (preset) => {
+    ctx.setSetting({ accent: preset.value, accentDark: preset.dark });
+    refreshSettingsUI();
+  });
 }
 
 function rerenderAll() {
@@ -463,6 +501,39 @@ const ctx = {
     n.color = color || null;
     rerenderAll();
   },
+
+  async printMap() {
+    try {
+      await printMap(state);
+    } catch (e) {
+      console.error(e);
+      toast('인쇄 준비에 실패했습니다: ' + (e.message || e));
+    }
+  },
+
+  // ---------- Settings ----------
+  openSettings() {
+    state.settingsOpen = true;
+    refreshSettingsUI();
+    document.getElementById('settings-backdrop').classList.remove('hidden');
+  },
+  closeSettings() {
+    state.settingsOpen = false;
+    document.getElementById('settings-backdrop').classList.add('hidden');
+  },
+  setSetting(patch) {
+    settings = { ...settings, ...patch };
+    saveSettings(settings);
+    applySettings(settings);
+    render(state); // re-measures/re-lays-out nodes at the new font size
+  },
+  resetSettings() {
+    settings = { ...DEFAULT_SETTINGS };
+    saveSettings(settings);
+    applySettings(settings);
+    render(state);
+    refreshSettingsUI();
+  },
 };
 
 setupCanvasInteractions(state, ctx);
@@ -558,6 +629,25 @@ document.getElementById('mm-input').onchange = (e) => {
 document.querySelectorAll('#color-group .swatch').forEach((btn) => {
   btn.onclick = () => ctx.setColor(btn.dataset.color || null);
 });
+
+document.getElementById('btn-print').onclick = () => ctx.printMap();
+
+document.getElementById('btn-settings').onclick = () => ctx.openSettings();
+document.getElementById('settings-close').onclick = () => ctx.closeSettings();
+document.getElementById('settings-done').onclick = () => ctx.closeSettings();
+document.getElementById('settings-backdrop').onclick = (e) => {
+  if (e.target.id === 'settings-backdrop') ctx.closeSettings();
+};
+document.getElementById('settings-reset').onclick = () => ctx.resetSettings();
+
+const fontSizeInput = document.getElementById('setting-font-size');
+fontSizeInput.oninput = (e) => {
+  const fontSize = parseInt(e.target.value, 10);
+  document.getElementById('setting-font-size-value').textContent = fontSize + 'px';
+  applySettings({ ...settings, fontSize }); // live preview while dragging
+  render(state);
+};
+fontSizeInput.onchange = (e) => ctx.setSetting({ fontSize: parseInt(e.target.value, 10) });
 
 window.addEventListener('resize', applyTransform);
 
