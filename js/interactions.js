@@ -325,6 +325,11 @@ export function setupCanvasInteractions(state, ctx) {
 
 export function setupKeyboard(state, ctx) {
   document.addEventListener('keydown', (e) => {
+    if (state.settingsOpen) {
+      if (e.key === 'Escape') { ctx.closeSettings(); e.preventDefault(); }
+      return;
+    }
+
     const editing = !!state.editingId;
     if (editing) {
       if (e.key === 'Escape') { ctx.cancelEdit(); e.preventDefault(); }
@@ -352,6 +357,9 @@ export function setupKeyboard(state, ctx) {
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       ctx.saveJSON(); e.preventDefault(); return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+      ctx.printMap(); e.preventDefault(); return;
     }
     if (!state.selectedId) return;
 
