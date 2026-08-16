@@ -66,7 +66,9 @@ export function deleteSubtree(node) {
 
 // Moves `node` (and its whole subtree) under `newParent`. `sideHint` is only
 // used when `newParent` is the root, to choose which side it lands on.
-export function reparentNode(node, newParent, sideHint) {
+// `atIndex`, if given, inserts the node at that position in newParent's
+// children instead of appending it at the end.
+export function reparentNode(node, newParent, sideHint, atIndex) {
   let p = newParent;
   while (p) {
     if (p === node) return false; // would create a cycle
@@ -80,9 +82,77 @@ export function reparentNode(node, newParent, sideHint) {
   node.parent = newParent;
   const side = newParent.isRoot ? (sideHint || pickSide(newParent)) : newParent.side;
   setSideRecursive(node, side);
-  newParent.children.push(node);
+  if (atIndex == null || atIndex > newParent.children.length) {
+    newParent.children.push(node);
+  } else {
+    newParent.children.splice(atIndex, 0, node);
+  }
   newParent.collapsed = false;
   return true;
+}
+
+// The root's `children` array interleaves its left- and right-side
+// top-level branches in a single list (order preserved per side, see
+// pickSide). Anything that walks "siblings" needs to stay within the same
+// visual side for root's direct children, or it'll jump across the canvas;
+// for any other parent all children already share one side, so this is a
+// no-op filter there.
+function sameSideSiblingsOf(node) {
+  const parent = node.parent;
+  if (!parent) return [];
+  if (!parent.isRoot) return parent.children;
+  const side = node.side || 'right';
+  return parent.children.filter((c) => (c.side || 'right') === side);
+}
+
+// dir: -1 (move earlier/up) or +1 (move later/down) among same-side siblings.
+export function canReorderNode(node, dir) {
+  const sibs = sameSideSiblingsOf(node);
+  const idx = sibs.indexOf(node);
+  if (idx < 0) return false;
+  const newIdx = idx + dir;
+  return newIdx >= 0 && newIdx < sibs.length;
+}
+
+export function reorderNode(node, dir) {
+  if (!canReorderNode(node, dir)) return false;
+  const sibs = sameSideSiblingsOf(node);
+  const idx = sibs.indexOf(node);
+  const other = sibs[idx + dir];
+  const parent = node.parent;
+  const realIdxA = parent.children.indexOf(node);
+  const realIdxB = parent.children.indexOf(other);
+  [parent.children[realIdxA], parent.children[realIdxB]] = [parent.children[realIdxB], parent.children[realIdxA]];
+  return true;
+}
+
+// Promotes `node` one level up: it becomes a sibling of its current parent,
+// placed immediately after it. Not possible for a top-level (root-child) node.
+export function canPromoteNode(node) {
+  return !!(node.parent && node.parent.parent);
+}
+
+export function promoteNode(node) {
+  if (!canPromoteNode(node)) return false;
+  const parent = node.parent;
+  const grandparent = parent.parent;
+  const parentIdx = grandparent.children.indexOf(parent);
+  const sideHint = grandparent.isRoot ? parent.side : undefined;
+  return reparentNode(node, grandparent, sideHint, parentIdx + 1);
+}
+
+// Demotes `node` one level down: it becomes the last child of its previous
+// (same-side) sibling. Not possible for a first child (no previous sibling).
+export function canDemoteNode(node) {
+  const sibs = sameSideSiblingsOf(node);
+  return sibs.indexOf(node) > 0;
+}
+
+export function demoteNode(node) {
+  if (!canDemoteNode(node)) return false;
+  const sibs = sameSideSiblingsOf(node);
+  const newParent = sibs[sibs.indexOf(node) - 1];
+  return reparentNode(node, newParent);
 }
 
 export function toggleCollapse(node) {
@@ -110,10 +180,11 @@ export function countDescendants(node) {
   return count;
 }
 
-// dir: -1 (previous sibling) or +1 (next sibling)
+// dir: -1 (previous sibling) or +1 (next sibling), staying within the same
+// visual side for root's direct children (see sameSideSiblingsOf).
 export function moveSelectionVertical(node, dir) {
   if (!node.parent) return node;
-  const sibs = node.parent.children;
+  const sibs = sameSideSiblingsOf(node);
   const idx = sibs.indexOf(node);
   const newIdx = idx + dir;
   if (newIdx < 0 || newIdx >= sibs.length) return node;
