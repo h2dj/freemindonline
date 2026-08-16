@@ -1,10 +1,11 @@
 import {
   createDefaultRoot, addChild, addSiblingAfter, deleteSubtree, toggleCollapse,
-  reparentNode, findNode, moveSelectionVertical, moveSelectionHorizontal,
+  reparentNode, findNode, moveSelectionHorizontal,
   reorderNode, canReorderNode, promoteNode, canPromoteNode, demoteNode, canDemoteNode,
+  flipRootChildSide, canFlipRootChildSide,
   toPlain, fromPlain, countDescendants,
 } from './model.js';
-import { render } from './render.js';
+import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
 import { autosave, loadAutosaved, downloadJSON, parseJSONFile, exportMM, parseMM } from './io.js';
 import { createHistory } from './undo.js';
@@ -139,8 +140,8 @@ const ctx = {
     const n = findNode(state.root, state.selectedId);
     if (!n) return;
     let target = n;
-    if (dir === 'up') target = moveSelectionVertical(n, -1);
-    else if (dir === 'down') target = moveSelectionVertical(n, 1);
+    if (dir === 'up') target = nextVisibleSameSide(state.root, n, -1);
+    else if (dir === 'down') target = nextVisibleSameSide(state.root, n, 1);
     else target = moveSelectionHorizontal(n, dir === 'right' ? 1 : -1);
     state.selectedId = target.id;
     render(state);
@@ -157,9 +158,11 @@ const ctx = {
 
   // dir: 'left'/'right' in screen terms — matches moveSelect's convention.
   // The direction pointing further away from the root demotes (nests the
-  // node one level deeper, under its previous sibling); the direction
+  // node one level deeper, under its previous sibling). The direction
   // pointing back toward the root promotes it (out to be a sibling of its
-  // current parent).
+  // current parent) — except for a root-level node, which has nowhere to
+  // promote to, so that direction instead flips it to the opposite branch
+  // of the root.
   changeLevel(dir) {
     const n = findNode(state.root, state.selectedId);
     if (!n || !n.parent) return;
@@ -167,7 +170,10 @@ const ctx = {
     const wantDir = dir === 'right' ? 1 : -1;
     const demoting = wantDir === outward;
     history.push();
-    const ok = demoting ? demoteNode(n) : promoteNode(n);
+    let ok;
+    if (demoting) ok = demoteNode(n);
+    else if (n.parent.isRoot) ok = flipRootChildSide(n);
+    else ok = promoteNode(n);
     if (!ok) { history.discardLast(); return; }
     rerenderAll();
   },
@@ -214,6 +220,7 @@ const ctx = {
     if (canReorderNode(n, -1)) items.push(['⬆ 위로 이동 (Ctrl+↑)', () => this.reorder(-1)]);
     if (canReorderNode(n, 1)) items.push(['⬇ 아래로 이동 (Ctrl+↓)', () => this.reorder(1)]);
     if (canPromoteNode(n)) items.push(['◀ 상위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
+    else if (canFlipRootChildSide(n)) items.push(['⇄ 반대편으로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
     if (canDemoteNode(n)) items.push(['▶ 하위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'left' : 'right')]);
     if (n.parent) items.push(['🗑 삭제', () => this.deleteSelected()]);
     items.forEach(([label, fn]) => {

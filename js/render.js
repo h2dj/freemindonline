@@ -1,9 +1,28 @@
 import { computeLayout } from './layout.js';
 import { measureNode } from './measure.js';
 
-function collectVisible(node, arr) {
+export function collectVisible(node, arr) {
   arr.push(node);
   if (!node.collapsed) node.children.forEach((c) => collectVisible(c, arr));
+}
+
+// Arrow-key Up/Down navigation: moves to the next/previous node on the same
+// side in *screen order* (by rendered y), not strictly among literal
+// siblings — so reaching the end of one branch's children continues into
+// whatever's visually next below/above (a cousin, an aunt/uncle's branch,
+// etc), matching how the tree actually looks on screen. Relies on x/y from
+// the most recent computeLayout() call (see render() below).
+export function nextVisibleSameSide(root, node, dir) {
+  if (!node.parent) return node; // root has no vertical peers
+  const all = [];
+  collectVisible(root, all);
+  const sameSide = all.filter((n) => !n.isRoot && n.side === node.side);
+  sameSide.sort((a, b) => a.y - b.y);
+  const idx = sameSide.indexOf(node);
+  if (idx < 0) return node;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= sameSide.length) return node;
+  return sameSide[newIdx];
 }
 
 function drawEdges(root) {

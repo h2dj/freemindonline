@@ -155,6 +155,20 @@ export function demoteNode(node) {
   return reparentNode(node, newParent);
 }
 
+// Flips a top-level (root-child) node — and its whole subtree — from the
+// left branch to the right one or vice versa. This is the only node-level
+// move available for a root child on the "toward the root" side, since it
+// has no grandparent to promote into.
+export function canFlipRootChildSide(node) {
+  return !!(node.parent && node.parent.isRoot);
+}
+
+export function flipRootChildSide(node) {
+  if (!canFlipRootChildSide(node)) return false;
+  setSideRecursive(node, node.side === 'left' ? 'right' : 'left');
+  return true;
+}
+
 export function toggleCollapse(node) {
   if (node.children.length) node.collapsed = !node.collapsed;
 }
@@ -178,17 +192,6 @@ export function countDescendants(node) {
   let count = 0;
   node.children.forEach((c) => (count += 1 + countDescendants(c)));
   return count;
-}
-
-// dir: -1 (previous sibling) or +1 (next sibling), staying within the same
-// visual side for root's direct children (see sameSideSiblingsOf).
-export function moveSelectionVertical(node, dir) {
-  if (!node.parent) return node;
-  const sibs = sameSideSiblingsOf(node);
-  const idx = sibs.indexOf(node);
-  const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= sibs.length) return node;
-  return sibs[newIdx];
 }
 
 // dir: -1 (screen-left) or +1 (screen-right). Moves toward children on the
