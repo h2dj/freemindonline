@@ -130,6 +130,153 @@ export function setupCanvasInteractions(state, ctx) {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#context-menu')) ctx.hideContextMenu();
   });
+
+  // ---------- Touch: one-finger pan/select/drag, two-finger pinch-zoom,
+  // long-press for the context menu, double-tap to edit. ----------
+  const TOUCH_MOVE_THRESHOLD = 8;
+  const LONG_PRESS_MS = 500;
+  const DOUBLE_TAP_MS = 350;
+
+  let pinch = null;
+  let longPressTimer = null;
+  let lastTap = null;
+
+  function touchDist(t0, t1) {
+    return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+  }
+  function touchMid(t0, t1) {
+    return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+  }
+  function resetTouchState() {
+    clearTimeout(longPressTimer);
+    pinch = null;
+    panDrag = null;
+    nodeDrag = null;
+    clearDropHighlight();
+    nodesLayer.classList.remove('dragging-node');
+  }
+
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      clearTimeout(longPressTimer);
+      panDrag = null;
+      nodeDrag = null;
+      const [t0, t1] = e.touches;
+      const rect = canvas.getBoundingClientRect();
+      const mid = touchMid(t0, t1);
+      pinch = {
+        startDist: touchDist(t0, t1),
+        startZoom: state.zoom,
+        anchorX: (mid.x - rect.left - state.pan.x) / state.zoom,
+        anchorY: (mid.y - rect.top - state.pan.y) / state.zoom,
+      };
+      return;
+    }
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+
+    const foldEl = t.target.closest?.('.fold-toggle');
+    if (foldEl) {
+      e.preventDefault();
+      ctx.toggleCollapse(foldEl.dataset.id);
+      return;
+    }
+
+    const nodeEl = t.target.closest?.('.node-box');
+    if (nodeEl) {
+      const id = nodeEl.dataset.id;
+      const alreadyEditingThis = state.editingId === id && t.target.closest('.node-text');
+      if (!alreadyEditingThis) ctx.select(id);
+      if (alreadyEditingThis) return; // let native caret placement / keyboard happen
+      nodeDrag = { id, startX: t.clientX, startY: t.clientY, moved: false, longPressFired: false };
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(() => {
+        if (!nodeDrag || nodeDrag.moved) return;
+        nodeDrag.longPressFired = true;
+        if (navigator.vibrate) { try { navigator.vibrate(10); } catch { /* ignore */ } }
+        ctx.showContextMenu(id, nodeDrag.startX, nodeDrag.startY);
+      }, LONG_PRESS_MS);
+      e.preventDefault();
+      return;
+    }
+
+    panDrag = { startX: t.clientX, startY: t.clientY, ox: state.pan.x, oy: state.pan.y };
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    if (!pinch && !panDrag && !nodeDrag) return; // e.g. actively editing text — let it scroll/select natively
+    e.preventDefault();
+
+    if (pinch && e.touches.length === 2) {
+      const [t0, t1] = e.touches;
+      const rect = canvas.getBoundingClientRect();
+      const scale = touchDist(t0, t1) / pinch.startDist;
+      const newZoom = Math.min(3, Math.max(0.2, pinch.startZoom * scale));
+      const mid = touchMid(t0, t1);
+      state.zoom = newZoom;
+      state.pan.x = (mid.x - rect.left) - pinch.anchorX * newZoom;
+      state.pan.y = (mid.y - rect.top) - pinch.anchorY * newZoom;
+      ctx.applyTransform();
+      return;
+    }
+
+    if (panDrag && e.touches.length === 1) {
+      const t = e.touches[0];
+      state.pan.x = panDrag.ox + (t.clientX - panDrag.startX);
+      state.pan.y = panDrag.oy + (t.clientY - panDrag.startY);
+      ctx.applyTransform();
+      return;
+    }
+
+    if (nodeDrag && e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - nodeDrag.startX;
+      const dy = t.clientY - nodeDrag.startY;
+      if (Math.abs(dx) > TOUCH_MOVE_THRESHOLD || Math.abs(dy) > TOUCH_MOVE_THRESHOLD) {
+        if (!nodeDrag.moved) clearTimeout(longPressTimer);
+        nodeDrag.moved = true;
+        nodesLayer.classList.add('dragging-node');
+        highlightDropTarget(t.clientX, t.clientY);
+      }
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) pinch = null;
+    if (e.touches.length > 0) return; // wait for all fingers to lift
+
+    clearTimeout(longPressTimer);
+    const changed = e.changedTouches[0];
+
+    if (nodeDrag) {
+      if (nodeDrag.moved) {
+        clearDropHighlight();
+        const targetEl = changed && document.elementFromPoint(changed.clientX, changed.clientY)?.closest('.node-box');
+        if (targetEl && targetEl.dataset.id !== nodeDrag.id) {
+          ctx.reparent(nodeDrag.id, targetEl.dataset.id, changed.clientX);
+        }
+      } else if (!nodeDrag.longPressFired) {
+        const now = Date.now();
+        if (lastTap && lastTap.id === nodeDrag.id && now - lastTap.time < DOUBLE_TAP_MS) {
+          ctx.startEdit(nodeDrag.id);
+          lastTap = null;
+        } else {
+          lastTap = { id: nodeDrag.id, time: now };
+        }
+      }
+    }
+    panDrag = null;
+    nodeDrag = null;
+    nodesLayer.classList.remove('dragging-node');
+  });
+
+  canvas.addEventListener('touchcancel', resetTouchState);
+
+  document.addEventListener('touchstart', (e) => {
+    if (!state.editingId) return;
+    const activeEl = document.querySelector(`.node-box[data-id="${CSS.escape(state.editingId)}"] .node-text`);
+    if (activeEl && !activeEl.contains(e.target)) ctx.commitEdit();
+  }, true);
 }
 
 export function setupKeyboard(state, ctx) {
