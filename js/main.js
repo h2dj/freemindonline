@@ -306,6 +306,15 @@ const ctx = {
     setCloud(n, null);
     rerenderAll();
   },
+  // Ctrl+Shift+J: add if there's no cloud yet, otherwise remove it — a
+  // single shortcut that toggles, since add/remove are already separate
+  // context-menu items but a keyboard shortcut only gets one verb.
+  toggleCloud(id) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    if (n.cloud) this.removeCloud(id);
+    else this.addCloud(id);
+  },
 
   // ---------- Chapter 3: hyperlinks ----------
   setLinkPrompt(id) {
@@ -457,10 +466,10 @@ const ctx = {
     else if (canFlipRootChildSide(n)) items.push(['⇄ 반대편으로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
     if (canDemoteNode(n)) items.push(['▶ 하위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'left' : 'right')]);
 
-    if (!n.cloud) items.push(['☁ 구름 추가', () => this.addCloud(id)]);
+    if (!n.cloud) items.push(['☁ 구름 추가 (Ctrl+Shift+J)', () => this.addCloud(id)]);
     else {
       items.push(['☁ 구름 색상 변경', () => this.cycleCloudColor(id)]);
-      items.push(['☁ 구름 제거', () => this.removeCloud(id)]);
+      items.push(['☁ 구름 제거 (Ctrl+Shift+J)', () => this.removeCloud(id)]);
     }
 
     if (!n.link) items.push(['🔗 링크 추가 (Ctrl+K)', () => this.setLinkPrompt(id)]);

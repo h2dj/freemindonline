@@ -367,6 +367,9 @@ export function setupKeyboard(state, ctx) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       ctx.setLinkPrompt(state.selectedId); e.preventDefault(); return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
+      ctx.toggleCloud(state.selectedId); e.preventDefault(); return;
+    }
 
     if (e.ctrlKey) {
       switch (e.key) {
