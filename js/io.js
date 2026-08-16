@@ -1,4 +1,5 @@
 import { toPlain, fromPlain, createDefaultRoot } from './model.js';
+import { computeContentBounds } from './render.js';
 
 const STORAGE_KEY = 'freemindonline.doc.v1';
 
@@ -192,6 +193,87 @@ export function parseMM(xmlText) {
     .map((l, i) => ({ id: 'gl-' + i + '-' + Math.random().toString(36).slice(2, 6), ...l }));
 
   return { root, graphicalLinks };
+}
+
+// Exports the whole map (regardless of current pan/zoom) as a PNG image, by
+// re-drawing the on-screen clouds/edges/graphical-links SVG layers plus a
+// snapshot of the HTML node layer into one standalone SVG document (nodes
+// go through a <foreignObject> since they're real HTML, not SVG), then
+// rasterizing that through an offscreen <canvas>. No external libraries —
+// keeps with the rest of this app being dependency-free.
+let cssTextCache = null;
+async function loadAppCSS() {
+  if (cssTextCache != null) return cssTextCache;
+  try {
+    const res = await fetch('css/styles.css');
+    cssTextCache = res.ok ? await res.text() : '';
+  } catch {
+    cssTextCache = '';
+  }
+  return cssTextCache;
+}
+
+export async function exportPNG(state, filename = 'mindmap.png') {
+  const bounds = computeContentBounds(state);
+  const MARGIN = 40;
+  const SCALE = 2; // export at 2x for a crisp, print-quality image
+  const width = Math.max(1, Math.ceil(bounds.maxX - bounds.minX) + MARGIN * 2);
+  const height = Math.max(1, Math.ceil(bounds.maxY - bounds.minY) + MARGIN * 2);
+  const dx = MARGIN - bounds.minX;
+  const dy = MARGIN - bounds.minY;
+
+  const css = await loadAppCSS();
+  const clouds = document.getElementById('clouds').innerHTML;
+  const edges = document.getElementById('edges').innerHTML;
+  const glinks = document.getElementById('glinks').innerHTML;
+
+  // A plain snapshot of the current nodes: strip interaction-only state
+  // (selection outline, in-progress edit) that shouldn't appear in an
+  // exported image of the map itself.
+  const nodesClone = document.getElementById('nodes').cloneNode(true);
+  nodesClone.querySelectorAll('.node-box').forEach((el) => {
+    el.classList.remove('selected', 'link-source');
+  });
+  nodesClone.querySelectorAll('[contenteditable]').forEach((el) => el.removeAttribute('contenteditable'));
+
+  const svgMarkup = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `<style>${css}</style>`,
+    `<rect x="0" y="0" width="${width}" height="${height}" fill="#f4f6f9"/>`,
+    `<g transform="translate(${dx}, ${dy})">${clouds}${edges}${glinks}</g>`,
+    `<foreignObject x="0" y="0" width="${width}" height="${height}">`,
+    `<div xmlns="http://www.w3.org/1999/xhtml" style="position:relative; width:${width}px; height:${height}px;">`,
+    `<div style="position:absolute; left:${dx}px; top:${dy}px;">${nodesClone.innerHTML}</div>`,
+    `</div>`,
+    `</foreignObject>`,
+    `</svg>`,
+  ].join('');
+
+  const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgMarkup);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = () => reject(new Error('SVG를 이미지로 변환하지 못했습니다.'));
+    img.src = svgUrl;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width * SCALE;
+  canvas.height = height * SCALE;
+  const c = canvas.getContext('2d');
+  c.scale(SCALE, SCALE);
+  c.drawImage(img, 0, 0, width, height);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('PNG 생성에 실패했습니다.');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export { createDefaultRoot };
