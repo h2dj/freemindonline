@@ -285,7 +285,7 @@ export function setupKeyboard(state, ctx) {
     if (editing) {
       if (e.key === 'Escape') { ctx.cancelEdit(); e.preventDefault(); }
       else if (e.key === 'Enter' && !e.shiftKey) { ctx.commitEdit(); e.preventDefault(); }
-      else if (e.key === 'Tab') { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
+      else if (e.key === 'Insert') { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
       return;
     }
     if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
@@ -302,7 +302,7 @@ export function setupKeyboard(state, ctx) {
     if (!state.selectedId) return;
 
     switch (e.key) {
-      case 'Tab': e.preventDefault(); ctx.addChild(); break;
+      case 'Insert': e.preventDefault(); ctx.addChild(); break;
       case 'Enter': e.preventDefault(); ctx.addSibling(); break;
       case 'F2': e.preventDefault(); ctx.startEdit(state.selectedId); break;
       case 'Delete': case 'Backspace': e.preventDefault(); ctx.deleteSelected(); break;
