@@ -1,6 +1,7 @@
 import {
   createDefaultRoot, addChild, addSiblingAfter, deleteSubtree, toggleCollapse,
   reparentNode, findNode, moveSelectionVertical, moveSelectionHorizontal,
+  reorderNode, canReorderNode, promoteNode, canPromoteNode, demoteNode, canDemoteNode,
   toPlain, fromPlain, countDescendants,
 } from './model.js';
 import { render } from './render.js';
@@ -145,6 +146,32 @@ const ctx = {
     render(state);
   },
 
+  // dir: -1 moves the node earlier among its siblings, +1 moves it later.
+  reorder(dir) {
+    const n = findNode(state.root, state.selectedId);
+    if (!n) return;
+    history.push();
+    if (!reorderNode(n, dir)) { history.discardLast(); return; }
+    rerenderAll();
+  },
+
+  // dir: 'left'/'right' in screen terms — matches moveSelect's convention.
+  // The direction pointing further away from the root demotes (nests the
+  // node one level deeper, under its previous sibling); the direction
+  // pointing back toward the root promotes it (out to be a sibling of its
+  // current parent).
+  changeLevel(dir) {
+    const n = findNode(state.root, state.selectedId);
+    if (!n || !n.parent) return;
+    const outward = n.side === 'left' ? -1 : 1;
+    const wantDir = dir === 'right' ? 1 : -1;
+    const demoting = wantDir === outward;
+    history.push();
+    const ok = demoting ? demoteNode(n) : promoteNode(n);
+    if (!ok) { history.discardLast(); return; }
+    rerenderAll();
+  },
+
   reparent(dragId, targetId, clientX) {
     if (dragId === targetId) return;
     const dragNode = findNode(state.root, dragId);
@@ -184,6 +211,10 @@ const ctx = {
       ['✏️ 이름 변경 (F2)', () => this.startEdit(id)],
     ];
     if (n.children.length) items.push([n.collapsed ? '펼치기' : '접기', () => this.toggleCollapse(id)]);
+    if (canReorderNode(n, -1)) items.push(['⬆ 위로 이동 (Ctrl+↑)', () => this.reorder(-1)]);
+    if (canReorderNode(n, 1)) items.push(['⬇ 아래로 이동 (Ctrl+↓)', () => this.reorder(1)]);
+    if (canPromoteNode(n)) items.push(['◀ 상위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
+    if (canDemoteNode(n)) items.push(['▶ 하위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'left' : 'right')]);
     if (n.parent) items.push(['🗑 삭제', () => this.deleteSelected()]);
     items.forEach(([label, fn]) => {
       const btn = document.createElement('button');

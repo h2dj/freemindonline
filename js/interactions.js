@@ -301,6 +301,16 @@ export function setupKeyboard(state, ctx) {
     }
     if (!state.selectedId) return;
 
+    if (e.ctrlKey) {
+      switch (e.key) {
+        case 'ArrowUp': e.preventDefault(); ctx.reorder(-1); return;
+        case 'ArrowDown': e.preventDefault(); ctx.reorder(1); return;
+        case 'ArrowLeft': e.preventDefault(); ctx.changeLevel('left'); return;
+        case 'ArrowRight': e.preventDefault(); ctx.changeLevel('right'); return;
+        default: break;
+      }
+    }
+
     switch (e.key) {
       case 'Insert': e.preventDefault(); ctx.addChild(); break;
       case 'Enter': e.preventDefault(); ctx.addSibling(); break;
