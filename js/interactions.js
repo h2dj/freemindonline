@@ -36,6 +36,8 @@ export function setupCanvasInteractions(state, ctx) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
+    if (e.target.closest('.glink-hit')) return; // handled on click; no pan/drag from a link
+    if (e.target.closest('.link-badge')) return; // handled on click; selecting/dragging here would rebuild the DOM mid-click
     const nodeEl = e.target.closest('.node-box');
     if (nodeEl) {
       const id = nodeEl.dataset.id;
@@ -101,17 +103,38 @@ export function setupCanvasInteractions(state, ctx) {
   });
 
   canvas.addEventListener('click', (e) => {
+    const linkBadge = e.target.closest('.link-badge');
+    if (linkBadge) {
+      ctx.openLink(linkBadge.dataset.id);
+      e.stopPropagation();
+      return;
+    }
+    const linkHit = e.target.closest('.glink-hit');
+    if (linkHit) {
+      ctx.selectGraphicalLink(linkHit.closest('g').dataset.linkId);
+      e.stopPropagation();
+      return;
+    }
     const foldEl = e.target.closest('.fold-toggle');
     if (foldEl) {
       ctx.toggleCollapse(foldEl.dataset.id);
       e.stopPropagation();
       return;
     }
-    if (e.target === canvas || e.target === world) ctx.select(null);
+    if (e.target === canvas || e.target === world) {
+      ctx.select(null);
+      ctx.selectGraphicalLink(null);
+      ctx.cancelLinkMode();
+    }
   });
 
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+    const linkHit = e.target.closest('.glink-hit');
+    if (linkHit) {
+      ctx.showLinkContextMenu(linkHit.closest('g').dataset.linkId, e.clientX, e.clientY);
+      return;
+    }
     const nodeEl = e.target.closest('.node-box');
     if (nodeEl) {
       ctx.select(nodeEl.dataset.id);
@@ -129,6 +152,7 @@ export function setupCanvasInteractions(state, ctx) {
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#context-menu')) ctx.hideContextMenu();
+    if (!e.target.closest('#icon-picker')) ctx.hideIconPicker();
   });
 
   // ---------- Touch: one-finger pan/select/drag, two-finger pinch-zoom,
@@ -174,6 +198,26 @@ export function setupCanvasInteractions(state, ctx) {
     }
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
+
+    const linkBadge = t.target.closest?.('.link-badge');
+    if (linkBadge) {
+      e.preventDefault();
+      ctx.openLink(linkBadge.dataset.id);
+      return;
+    }
+
+    const linkHit = t.target.closest?.('.glink-hit');
+    if (linkHit) {
+      e.preventDefault();
+      const linkId = linkHit.closest('g').dataset.linkId;
+      ctx.selectGraphicalLink(linkId);
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(() => {
+        if (navigator.vibrate) { try { navigator.vibrate(10); } catch { /* ignore */ } }
+        ctx.showLinkContextMenu(linkId, t.clientX, t.clientY);
+      }, LONG_PRESS_MS);
+      return;
+    }
 
     const foldEl = t.target.closest?.('.fold-toggle');
     if (foldEl) {
@@ -289,6 +333,16 @@ export function setupKeyboard(state, ctx) {
       return;
     }
     if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
+
+    if (e.key === 'Escape') {
+      if (state.linkSourceId) { ctx.cancelLinkMode(); e.preventDefault(); return; }
+      if (state.selectedLinkId) { ctx.selectGraphicalLink(null); e.preventDefault(); return; }
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedLinkId) {
+      ctx.deleteGraphicalLink(state.selectedLinkId);
+      e.preventDefault();
+      return;
+    }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
       ctx.undo(); e.preventDefault(); return;

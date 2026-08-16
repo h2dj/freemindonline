@@ -17,7 +17,8 @@ export function measureNode(node) {
   const el = getProbe();
   el.classList.toggle('root-box', !!node.isRoot);
   el.style.width = '';
-  el.textContent = node.text && node.text.length ? node.text : ' ';
+  const iconPrefix = node.icons && node.icons.length ? node.icons.join(' ') + ' ' : '';
+  el.textContent = iconPrefix + (node.text && node.text.length ? node.text : ' ');
   const rect = el.getBoundingClientRect();
   el.classList.remove('root-box');
   return {
