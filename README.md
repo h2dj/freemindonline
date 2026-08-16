@@ -16,6 +16,10 @@ python3 -m http.server 8000
 
 이후 브라우저에서 `http://localhost:8000` 접속.
 
+## 배포
+
+`main` 브랜치에 푸시되면 `.github/workflows/deploy-pages.yml` 워크플로가 자동으로 GitHub Pages에 배포합니다. 저장소 Settings → Pages에서 Source를 "GitHub Actions"로 한 번 설정해 두면, 이후로는 `main`에 머지될 때마다 자동으로 최신 버전이 배포됩니다.
+
 ## 주요 기능
 
 - 중심 주제를 기준으로 좌/우 양쪽으로 뻗는 자동 트리 레이아웃
