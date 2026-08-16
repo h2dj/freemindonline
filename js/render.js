@@ -29,6 +29,8 @@ export function nextVisibleSameSide(root, node, dir) {
   return sameSide[newIdx];
 }
 
+const CLOUD_PAD = 14;
+
 // Bounding box of `node` plus all of its *visible* descendants (a collapsed
 // node's hidden children don't extend the cloud). Used to draw a highlight
 // bubble behind a node's whole subtree (Chapter 3: "Highlighting nodes with
@@ -45,6 +47,45 @@ function subtreeBounds(node) {
   }
   visit(node);
   return { minX, maxX, minY, maxY };
+}
+
+// Bounding box of everything render() would draw: every visible node, cloud
+// highlights, and graphical-link curves (including their bow). Relies on
+// x/y/w/h from the most recent computeLayout() call. Used by PNG export to
+// size the exported image so nothing gets clipped.
+export function computeContentBounds(state) {
+  const list = [];
+  collectVisible(state.root, list);
+  if (!list.length) return { minX: -100, minY: -60, maxX: 100, maxY: 60 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  list.forEach((n) => {
+    minX = Math.min(minX, n.x - n.w / 2);
+    maxX = Math.max(maxX, n.x + n.w / 2);
+    minY = Math.min(minY, n.y - n.h / 2);
+    maxY = Math.max(maxY, n.y + n.h / 2);
+    if (n.cloud) {
+      const b = subtreeBounds(n);
+      minX = Math.min(minX, b.minX - CLOUD_PAD);
+      maxX = Math.max(maxX, b.maxX + CLOUD_PAD);
+      minY = Math.min(minY, b.minY - CLOUD_PAD);
+      maxY = Math.max(maxY, b.maxY + CLOUD_PAD);
+    }
+  });
+  (state.graphicalLinks || []).forEach((link) => {
+    const from = findNode(state.root, link.fromId);
+    const to = findNode(state.root, link.toId);
+    if (!from || !to || from.x == null || to.x == null) return;
+    const mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const bow = Math.min(70, len * 0.18);
+    const cx = mx + (-dy / len) * bow, cy = my + (dx / len) * bow;
+    minX = Math.min(minX, from.x, to.x, cx);
+    maxX = Math.max(maxX, from.x, to.x, cx);
+    minY = Math.min(minY, from.y, to.y, cy);
+    maxY = Math.max(maxY, from.y, to.y, cy);
+  });
+  return { minX, minY, maxX, maxY };
 }
 
 function drawClouds(root) {

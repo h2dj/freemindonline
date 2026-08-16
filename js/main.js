@@ -8,7 +8,7 @@ import {
 } from './model.js';
 import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
-import { autosave, loadAutosaved, downloadJSON, parseJSONFile, exportMM, parseMM } from './io.js';
+import { autosave, loadAutosaved, downloadJSON, parseJSONFile, exportMM, parseMM, exportPNG } from './io.js';
 import { createHistory } from './undo.js';
 
 const CLOUD_COLORS = ['#c9d6e3', '#fde68a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fecaca'];
@@ -518,6 +518,19 @@ document.getElementById('file-input').onchange = (e) => {
 
 document.getElementById('btn-export-mm').onclick = () => { exportMM(state.root, state.graphicalLinks); toast('.mm 파일로 내보냈습니다.'); };
 document.getElementById('btn-import-mm').onclick = () => document.getElementById('mm-input').click();
+document.getElementById('btn-export-png').onclick = async () => {
+  const btn = document.getElementById('btn-export-png');
+  btn.disabled = true;
+  try {
+    await exportPNG(state);
+    toast('PNG 이미지로 내보냈습니다.');
+  } catch (e) {
+    console.error(e);
+    toast('PNG 내보내기에 실패했습니다.');
+  } finally {
+    btn.disabled = false;
+  }
+};
 document.getElementById('mm-input').onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
