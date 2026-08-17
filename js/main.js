@@ -136,10 +136,37 @@ function refreshSettingsUI() {
   });
 }
 
+// Left icon sidebar: lets a single click on any icon add it straight to
+// whichever node is currently selected, instead of having to open the
+// context menu → "아이콘 추가" → picker every time. The button set itself
+// is static (built once); only the enabled/disabled state needs to track
+// the current selection, so it's kept separate from the main map redraw.
+function buildIconSidebar() {
+  const grid = document.getElementById('icon-sidebar-grid');
+  grid.innerHTML = '';
+  ICON_PALETTE.forEach((icon) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = icon;
+    btn.title = icon + ' 추가';
+    btn.onclick = () => {
+      if (!state.selectedId) return;
+      ctx.addIconTo(state.selectedId, icon);
+    };
+    grid.appendChild(btn);
+  });
+}
+
+function updateIconSidebar() {
+  const disabled = !state.selectedId;
+  document.querySelectorAll('#icon-sidebar-grid button').forEach((btn) => { btn.disabled = disabled; });
+}
+
 function rerenderAll() {
   render(state);
   applyTransform();
   updateUndoRedoButtons();
+  updateIconSidebar();
   autosave(state.root, state.graphicalLinks);
 }
 
@@ -148,6 +175,7 @@ const ctx = {
     if (state.editingId && state.editingId !== id) this.commitEdit();
     state.selectedId = id;
     render(state);
+    updateIconSidebar();
   },
 
   toggleCollapse(id) {
@@ -230,6 +258,7 @@ const ctx = {
     else target = moveSelectionHorizontal(n, dir === 'right' ? 1 : -1);
     state.selectedId = target.id;
     render(state);
+    updateIconSidebar();
   },
 
   // dir: -1 moves the node earlier among its siblings, +1 moves it later.
@@ -692,6 +721,17 @@ fontSizeInput.oninput = (e) => {
 fontSizeInput.onchange = (e) => ctx.setSetting({ fontSize: parseInt(e.target.value, 10) });
 
 window.addEventListener('resize', applyTransform);
+
+buildIconSidebar();
+document.getElementById('icon-sidebar-toggle').onclick = () => {
+  document.getElementById('icon-sidebar').classList.toggle('collapsed');
+};
+// Start collapsed on narrow/touch screens, where a persistent 200px-wide
+// sidebar would eat too much of the already-tight canvas — still just one
+// tap away via the toggle either way.
+if (window.matchMedia('(max-width: 640px), (pointer: coarse)').matches) {
+  document.getElementById('icon-sidebar').classList.add('collapsed');
+}
 
 rerenderAll();
 centerOnRoot();
