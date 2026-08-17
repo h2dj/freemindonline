@@ -1,7 +1,11 @@
-import { toPlain, fromPlain, createDefaultRoot } from './model.js';
+import { toPlain, fromPlain, createDefaultRoot, makeId } from './model.js';
 import { computeContentBounds } from './render.js';
 
-const STORAGE_KEY = 'freemindonline.doc.v1';
+const TABS_STORAGE_KEY = 'freemindonline.tabs.v1';
+// Superseded by TABS_STORAGE_KEY once multi-tab support landed, but kept
+// around purely so loadTabs() can migrate a single-document save from
+// before that into a one-tab session instead of silently losing it.
+const LEGACY_STORAGE_KEY = 'freemindonline.doc.v1';
 
 // A small subset of FreeMind's real built-in icon names, mapped to a
 // visually-equivalent emoji, so importing an actual FreeMind .mm file
@@ -30,23 +34,64 @@ function deserializeDoc(raw) {
   };
 }
 
-export function autosave(root, graphicalLinks) {
+// Multiple maps open at once (Chapter: tabs) — each tab is its own
+// document (root + graphical links) plus its own pan/zoom, so returning to
+// a tab leaves you where you left it. The whole session (every open tab)
+// autosaves together under one key.
+function serializeTab(tab) {
+  return {
+    id: tab.id,
+    ...serializeDoc(tab.root, tab.graphicalLinks),
+    pan: { x: tab.pan.x, y: tab.pan.y },
+    zoom: tab.zoom,
+  };
+}
+
+function deserializeTab(raw) {
+  const doc = deserializeDoc(raw);
+  return {
+    id: raw.id || makeId(),
+    root: doc.root,
+    graphicalLinks: doc.graphicalLinks,
+    selectedId: null, // always defaults to the root on a fresh page load
+    pan: raw.pan && typeof raw.pan.x === 'number' ? { x: raw.pan.x, y: raw.pan.y } : { x: 0, y: 0 },
+    zoom: typeof raw.zoom === 'number' ? raw.zoom : 1,
+  };
+}
+
+export function autosaveTabs(tabs, activeTabId) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeDoc(root, graphicalLinks)));
+    localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      activeTabId,
+      tabs: tabs.map(serializeTab),
+    }));
   } catch (e) {
     console.warn('autosave failed', e);
   }
 }
 
-export function loadAutosaved() {
+// Returns { tabs: [...], activeTabId } — or null if there's nothing saved
+// yet at all (first-ever visit), in which case the caller starts with one
+// fresh blank tab.
+export function loadTabs() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return deserializeDoc(JSON.parse(raw));
+    const raw = localStorage.getItem(TABS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length) {
+        return { tabs: parsed.tabs.map(deserializeTab), activeTabId: parsed.activeTabId };
+      }
+    }
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      const tab = deserializeTab({ id: makeId(), ...JSON.parse(legacy) });
+      return { tabs: [tab], activeTabId: tab.id };
+    }
   } catch (e) {
-    console.warn('failed to load autosaved map', e);
-    return null;
+    console.warn('failed to load tabs', e);
   }
+  return null;
 }
 
 function triggerDownload(content, filename, mime) {
