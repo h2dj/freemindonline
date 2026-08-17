@@ -127,7 +127,7 @@ body {
 
 #icon-sidebar {
   flex-shrink: 0;
-  width: 208px;
+  width: 40px;
   background: var(--toolbar-bg);
   border-right: 1px solid var(--border);
   display: flex;
@@ -135,31 +135,25 @@ body {
   transition: width .15s ease;
   overflow: hidden;
 }
-#icon-sidebar.collapsed { width: 34px; }
-#icon-sidebar.collapsed .icon-sidebar-title,
+#icon-sidebar.collapsed { width: 26px; }
 #icon-sidebar.collapsed #icon-sidebar-grid { display: none; }
 #icon-sidebar.collapsed .icon-sidebar-toggle { transform: rotate(180deg); }
 
 .icon-sidebar-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 8px;
+  justify-content: center;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
   flex-shrink: 0;
 }
 .icon-sidebar-toggle {
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 6px;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
   cursor: pointer;
   transition: background .12s, border-color .12s, transform .15s ease;
@@ -167,26 +161,33 @@ body {
 }
 .icon-sidebar-toggle:hover { background: #eef2f8; border-color: #b9c2cf; }
 
+/* Single column of small, borderless icons — a compact, always-visible
+   palette rather than a grid of boxed buttons. */
 #icon-sidebar-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 2px;
   overflow-y: auto;
 }
 #icon-sidebar-grid button {
-  border: 1px solid var(--border);
-  background: #fff;
-  border-radius: 6px;
-  padding: 7px 2px;
-  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 5px;
+  padding: 3px 0;
+  font-size: 13px;
   cursor: pointer;
   touch-action: manipulation;
-  transition: background .12s, border-color .12s;
+  transition: background .12s;
 }
-#icon-sidebar-grid button:hover { background: #eef2f8; border-color: #b9c2cf; }
+#icon-sidebar-grid button:hover { background: #eef2f8; }
 #icon-sidebar-grid button:disabled { opacity: .35; cursor: default; }
-#icon-sidebar-grid button:disabled:hover { background: #fff; border-color: var(--border); }
+#icon-sidebar-grid button:disabled:hover { background: none; }
 
 /* ---------- Canvas ---------- */
 #canvas {
@@ -316,6 +317,22 @@ body {
   font-size: 1em;
 }
 
+/* A colored number badge (Chapter 3 icons '#1'..'#9') — white digit on a
+   per-number background, since no single emoji glyph can be recolored. */
+.icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
+  height: 1.15em;
+  border-radius: 50%;
+  color: #fff;
+  font-size: .8em;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: -.2em;
+}
+
 .link-badge {
   position: absolute;
   top: -8px;
@@ -335,6 +352,7 @@ body {
 }
 
 .node-text {
+  display: inline; /* flows on the same line as .node-icons, right after it, instead of wrapping to its own line */
   overflow-wrap: break-word;
   white-space: pre-wrap;
 }
@@ -588,10 +606,10 @@ body {
     height: 26px;
   }
 
-  #icon-sidebar { width: 168px; }
-  #icon-sidebar-grid { grid-template-columns: repeat(3, 1fr); }
-  #icon-sidebar-grid button { padding: 10px 2px; font-size: 20px; min-height: 42px; }
-  .icon-sidebar-toggle { width: 30px; height: 30px; font-size: 13px; }
+  #icon-sidebar { width: 46px; }
+  #icon-sidebar.collapsed { width: 32px; }
+  #icon-sidebar-grid button { padding: 8px 0; font-size: 18px; min-height: 38px; }
+  .icon-sidebar-toggle { width: 28px; height: 28px; font-size: 13px; }
 
   .fold-toggle {
     width: 24px;

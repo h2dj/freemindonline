@@ -14,13 +14,14 @@ import {
   loadSettings, saveSettings, applySettings,
   NODE_COLOR_PRESETS, ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS,
 } from './settings.js';
+import { renderIconToken } from './icons.js';
 
 const CLOUD_COLORS = ['#c9d6e3', '#fde68a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fecaca'];
 const LINK_COLORS = ['#f97316', '#2563eb', '#16a34a', '#db2777', '#64748b'];
 const ICON_PALETTE = [
   '⭐', '❗', '❓', '✅', '❌', '⚠️', '💡', '📌', '🚩', '❤️', '⏰', '🔥', '👍', '👎', '🔒', '📎', '🎯', '🏆',
-  // 원 안에 표시되는 숫자 0~9
-  '⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨',
+  // 색깔별 원형 배지 숫자 1~9 (renderIconToken이 '#N' 토큰을 흰 글자 배지로 그림)
+  '#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8', '#9',
   // 사람 모양
   '👤', '🧑', '👨', '👩',
   // 기타: 폭탄, 노트, 마법봉, 돋보기, 모래시계, 7색깔 깃발
@@ -141,14 +142,19 @@ function refreshSettingsUI() {
 // context menu → "아이콘 추가" → picker every time. The button set itself
 // is static (built once); only the enabled/disabled state needs to track
 // the current selection, so it's kept separate from the main map redraw.
+function iconLabel(icon) {
+  const m = /^#([1-9])$/.exec(icon);
+  return m ? `숫자 ${m[1]}` : icon;
+}
+
 function buildIconSidebar() {
   const grid = document.getElementById('icon-sidebar-grid');
   grid.innerHTML = '';
   ICON_PALETTE.forEach((icon) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = icon;
-    btn.title = icon + ' 추가';
+    btn.appendChild(renderIconToken(icon));
+    btn.title = iconLabel(icon) + ' 추가';
     btn.onclick = () => {
       if (!state.selectedId) return;
       ctx.addIconTo(state.selectedId, icon);
@@ -382,7 +388,8 @@ const ctx = {
     picker.innerHTML = '';
     ICON_PALETTE.forEach((icon) => {
       const btn = document.createElement('button');
-      btn.textContent = icon;
+      btn.appendChild(renderIconToken(icon));
+      btn.title = iconLabel(icon);
       btn.onclick = (e) => { e.stopPropagation(); this.addIconTo(id, icon); this.hideIconPicker(); };
       picker.appendChild(btn);
     });
