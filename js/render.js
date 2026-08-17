@@ -1,6 +1,7 @@
 import { computeLayout } from './layout.js';
 import { measureNode } from './measure.js';
 import { findNode } from './model.js';
+import { renderIconToken } from './icons.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_LINK_COLOR = '#f97316';
@@ -239,7 +240,10 @@ function drawNodes(state) {
     if (n.icons.length) {
       const icons = document.createElement('div');
       icons.className = 'node-icons';
-      icons.textContent = n.icons.join(' ');
+      n.icons.forEach((icon, i) => {
+        if (i > 0) icons.appendChild(document.createTextNode(' '));
+        icons.appendChild(renderIconToken(icon));
+      });
       div.appendChild(icons);
     }
 
