@@ -116,6 +116,93 @@ body {
 }
 .swatch:hover { transform: scale(1.15); }
 
+/* ---------- Tab bar: multiple open maps ---------- */
+#tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  padding-left: calc(10px + env(safe-area-inset-left));
+  padding-right: calc(10px + env(safe-area-inset-right));
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#tab-list {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#tab-list::-webkit-scrollbar { display: none; }
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 160px;
+  touch-action: manipulation;
+  transition: background .12s, border-color .12s;
+}
+.tab:hover { background: #eef2f8; }
+.tab.active {
+  background: #fff;
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: .5;
+  font-size: 13px;
+  line-height: 1;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
+.tab-close:hover { opacity: 1; background: rgba(15, 23, 42, .1); }
+
+#btn-new-tab {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background .12s, border-color .12s;
+}
+#btn-new-tab:hover { background: #eef2f8; border-color: #b9c2cf; }
+
 /* ---------- Body row: icon sidebar + canvas, side by side ---------- */
 #body-row {
   display: flex;
@@ -610,6 +697,10 @@ body {
   #icon-sidebar.collapsed { width: 32px; }
   #icon-sidebar-grid button { padding: 8px 0; font-size: 18px; min-height: 38px; }
   .icon-sidebar-toggle { width: 28px; height: 28px; font-size: 13px; }
+
+  .tab { padding: 8px 8px 8px 12px; font-size: 13px; max-width: 130px; }
+  .tab-close { width: 22px; height: 22px; font-size: 15px; }
+  #btn-new-tab { width: 30px; height: 30px; font-size: 17px; }
 
   .fold-toggle {
     width: 24px;

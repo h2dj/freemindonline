@@ -8,7 +8,7 @@ import {
 } from './model.js';
 import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
-import { autosave, loadAutosaved, downloadJSON, parseJSONFile, exportMM, parseMM, exportPNG, printMap } from './io.js';
+import { autosaveTabs, loadTabs, downloadJSON, parseJSONFile, exportMM, parseMM, exportPNG, printMap } from './io.js';
 import { createHistory } from './undo.js';
 import {
   loadSettings, saveSettings, applySettings,
@@ -34,40 +34,93 @@ const ICON_PALETTE = [
 let settings = loadSettings();
 applySettings(settings);
 
-const loaded = loadAutosaved();
+// Multiple maps open at once: each tab owns its own document (root +
+// graphical links), pan/zoom, and undo history. `state` always holds the
+// data for whichever tab is currently active — its object identity never
+// changes (interactions.js/render.js hold a reference to this exact
+// object), only its properties get swapped out on tab switch. `history`
+// is a plain module-level binding reassigned to the active tab's own
+// undo/redo instance for the same reason: every ctx method that calls
+// history.push()/undo()/redo() just references this binding by name, so
+// reassigning it here is all it takes to redirect them to the new tab.
 const state = {
-  root: loaded ? loaded.root : createDefaultRoot(),
-  graphicalLinks: loaded ? loaded.graphicalLinks : [],
-  selectedId: null,
-  editingId: null,
-  linkSourceId: null,
-  selectedLinkId: null,
-  settingsOpen: false,
-  pan: { x: 0, y: 0 },
-  zoom: 1,
+  root: null, graphicalLinks: null, selectedId: null, editingId: null,
+  linkSourceId: null, selectedLinkId: null, settingsOpen: false,
+  pan: { x: 0, y: 0 }, zoom: 1,
 };
-state.selectedId = state.root.id;
+let history = null;
+let tabs = [];
+let activeTabId = null;
 
-const history = createHistory(
-  () => ({
-    plain: toPlain(state.root),
-    selectedId: state.selectedId,
-    links: state.graphicalLinks.map((l) => ({ ...l })),
-  }),
-  (snap) => {
-    state.root = fromPlain(snap.plain);
-    state.selectedId = snap.selectedId;
-    state.graphicalLinks = (snap.links || []).map((l) => ({ ...l }));
-    state.editingId = null;
-    state.linkSourceId = null;
-    state.selectedLinkId = null;
-    rerenderAll();
-  },
-);
+function makeHistory() {
+  return createHistory(
+    () => ({
+      plain: toPlain(state.root),
+      selectedId: state.selectedId,
+      links: state.graphicalLinks.map((l) => ({ ...l })),
+    }),
+    (snap) => {
+      state.root = fromPlain(snap.plain);
+      state.selectedId = snap.selectedId;
+      state.graphicalLinks = (snap.links || []).map((l) => ({ ...l }));
+      state.editingId = null;
+      state.linkSourceId = null;
+      state.selectedLinkId = null;
+      rerenderAll();
+    },
+  );
+}
 
+function newBlankTab() {
+  const root = createDefaultRoot();
+  return { id: makeId(), root, graphicalLinks: [], selectedId: root.id, pan: { x: 0, y: 0 }, zoom: 1, history: makeHistory() };
+}
+
+// Pulls whatever the active tab currently looks like on screen back into
+// its entry in `tabs`, so that entry isn't stale the moment another tab
+// becomes active (or the whole session autosaves).
+function snapshotStateIntoTab(tab) {
+  tab.root = state.root;
+  tab.graphicalLinks = state.graphicalLinks;
+  tab.selectedId = state.selectedId;
+  tab.pan = { x: state.pan.x, y: state.pan.y };
+  tab.zoom = state.zoom;
+}
+
+function loadTabIntoState(tab) {
+  state.root = tab.root;
+  state.graphicalLinks = tab.graphicalLinks;
+  state.selectedId = tab.selectedId || tab.root.id;
+  state.editingId = null;
+  state.linkSourceId = null;
+  state.selectedLinkId = null;
+  state.pan = { x: tab.pan.x, y: tab.pan.y };
+  state.zoom = tab.zoom;
+  history = tab.history;
+}
+
+const loadedTabs = loadTabs();
+if (loadedTabs && loadedTabs.tabs.length) {
+  tabs = loadedTabs.tabs.map((t) => ({ ...t, history: makeHistory() }));
+  activeTabId = tabs.some((t) => t.id === loadedTabs.activeTabId) ? loadedTabs.activeTabId : tabs[0].id;
+} else {
+  const tab = newBlankTab();
+  tabs = [tab];
+  activeTabId = tab.id;
+}
+loadTabIntoState(tabs.find((t) => t.id === activeTabId));
+
+// Pure panning/zooming never goes through rerenderAll() (nothing about the
+// map itself changed, so a full re-render would be wasted work) — but the
+// new per-tab pan/zoom persistence means it still needs to be saved
+// eventually. Debounced so a drag or a flurry of wheel events doesn't spam
+// localStorage; it settles ~500ms after the user stops moving the canvas.
+let panSaveTimer = null;
 function applyTransform() {
   document.getElementById('world').style.transform =
     `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+  clearTimeout(panSaveTimer);
+  panSaveTimer = setTimeout(saveTabs, 500);
 }
 
 function centerOnRoot() {
@@ -168,12 +221,55 @@ function updateIconSidebar() {
   document.querySelectorAll('#icon-sidebar-grid button').forEach((btn) => { btn.disabled = disabled; });
 }
 
+function tabTitle(tab, rootText) {
+  const text = (rootText != null ? rootText : tab.root.text || '').trim();
+  return text || '새 마인드맵';
+}
+
+function renderTabBar() {
+  const list = document.getElementById('tab-list');
+  list.innerHTML = '';
+  tabs.forEach((tab) => {
+    const isActive = tab.id === activeTabId;
+    const title = tabTitle(tab, isActive ? state.root.text : undefined);
+    const el = document.createElement('div');
+    el.className = 'tab' + (isActive ? ' active' : '');
+    el.title = title;
+    el.onclick = () => ctx.switchTab(tab.id);
+
+    const label = document.createElement('span');
+    label.className = 'tab-label';
+    label.textContent = title;
+    el.appendChild(label);
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'tab-close';
+    close.title = '탭 닫기';
+    close.textContent = '×';
+    close.onclick = (e) => { e.stopPropagation(); ctx.closeTab(tab.id); };
+    el.appendChild(close);
+
+    list.appendChild(el);
+  });
+}
+
+// Keeps the active tab's entry in `tabs` in sync with what's on screen
+// before persisting — otherwise the array only reflects a tab's state as
+// of the last time it was switched *away from*, not live edits.
+function saveTabs() {
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  if (activeTab) snapshotStateIntoTab(activeTab);
+  autosaveTabs(tabs, activeTabId);
+}
+
 function rerenderAll() {
   render(state);
   applyTransform();
   updateUndoRedoButtons();
   updateIconSidebar();
-  autosave(state.root, state.graphicalLinks);
+  renderTabBar();
+  saveTabs();
 }
 
 const ctx = {
@@ -565,6 +661,67 @@ const ctx = {
     if (hidden) this.showFileMenu(); else this.hideFileMenu();
   },
 
+  // ---------- Tabs (multiple open maps) ----------
+  switchTab(id) {
+    if (id === activeTabId) return;
+    if (state.editingId) this.commitEdit();
+    const oldTab = tabs.find((t) => t.id === activeTabId);
+    if (oldTab) snapshotStateIntoTab(oldTab);
+    const newTab = tabs.find((t) => t.id === id);
+    if (!newTab) return;
+    activeTabId = id;
+    loadTabIntoState(newTab);
+    rerenderAll();
+    // A never-viewed tab (e.g. migrated from the pre-tabs autosave) has no
+    // real saved pan yet — center it instead of pinning it to the corner.
+    if (state.pan.x !== 0 || state.pan.y !== 0) applyTransform();
+    else centerOnRoot();
+  },
+  newTab() {
+    if (state.editingId) this.commitEdit();
+    const oldTab = tabs.find((t) => t.id === activeTabId);
+    if (oldTab) snapshotStateIntoTab(oldTab);
+    const tab = newBlankTab();
+    tabs.push(tab);
+    activeTabId = tab.id;
+    loadTabIntoState(tab);
+    rerenderAll();
+    centerOnRoot();
+  },
+  closeTab(id) {
+    const idx = tabs.findIndex((t) => t.id === id);
+    if (idx < 0) return;
+
+    if (tabs.length === 1) {
+      if (!confirm('마지막 탭입니다. 닫으면 새 빈 지도로 바뀝니다. 계속할까요?')) return;
+      const tab = tabs[0];
+      tab.root = createDefaultRoot();
+      tab.graphicalLinks = [];
+      tab.pan = { x: 0, y: 0 };
+      tab.zoom = 1;
+      tab.selectedId = tab.root.id;
+      tab.history = makeHistory();
+      loadTabIntoState(tab);
+      rerenderAll();
+      centerOnRoot();
+      return;
+    }
+
+    const wasActive = id === activeTabId;
+    tabs.splice(idx, 1);
+    if (wasActive) {
+      const next = tabs[Math.max(0, idx - 1)];
+      activeTabId = next.id;
+      loadTabIntoState(next);
+      rerenderAll();
+      if (state.pan.x !== 0 || state.pan.y !== 0) applyTransform();
+      else centerOnRoot();
+    } else {
+      saveTabs();
+      renderTabBar();
+    }
+  },
+
   setColor(color) {
     const n = findNode(state.root, state.selectedId);
     if (!n) return;
@@ -619,17 +776,8 @@ document.getElementById('btn-zoom-in').onclick = () => { state.zoom = Math.min(3
 document.getElementById('btn-zoom-out').onclick = () => { state.zoom = Math.max(0.2, state.zoom / 1.2); applyTransform(); };
 document.getElementById('btn-zoom-reset').onclick = () => centerOnRoot();
 
-document.getElementById('btn-new').onclick = () => {
-  if (!confirm('새 마인드맵을 만들까요? 저장하지 않은 변경사항은 사라집니다.')) return;
-  history.push();
-  state.root = createDefaultRoot();
-  state.graphicalLinks = [];
-  state.linkSourceId = null;
-  state.selectedLinkId = null;
-  state.selectedId = state.root.id;
-  rerenderAll();
-  centerOnRoot();
-};
+document.getElementById('btn-new').onclick = () => ctx.newTab();
+document.getElementById('btn-new-tab').onclick = () => ctx.newTab();
 
 document.getElementById('btn-save').onclick = () => ctx.saveJSON();
 
@@ -741,4 +889,9 @@ if (window.matchMedia('(max-width: 640px), (pointer: coarse)').matches) {
 }
 
 rerenderAll();
-centerOnRoot();
+// A tab with a real saved pan (i.e. it was actually viewed/panned before —
+// including in a previous session) restores exactly where it was left. A
+// brand-new tab, or one migrated from the pre-tabs single-document
+// autosave (which never recorded pan/zoom), still defaults to centered.
+if (state.pan.x !== 0 || state.pan.y !== 0) applyTransform();
+else centerOnRoot();
