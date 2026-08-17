@@ -344,6 +344,8 @@ body {
   grid-template-columns: repeat(6, 1fr);
   gap: 2px;
   min-width: unset;
+  max-height: min(360px, 70vh);
+  overflow-y: auto;
 }
 #icon-picker.hidden { display: none; }
 #icon-picker button {

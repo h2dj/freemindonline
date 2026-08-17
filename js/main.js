@@ -17,7 +17,15 @@ import {
 
 const CLOUD_COLORS = ['#c9d6e3', '#fde68a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fecaca'];
 const LINK_COLORS = ['#f97316', '#2563eb', '#16a34a', '#db2777', '#64748b'];
-const ICON_PALETTE = ['⭐', '❗', '❓', '✅', '❌', '⚠️', '💡', '📌', '🚩', '❤️', '⏰', '🔥', '👍', '👎', '🔒', '📎', '🎯', '🏆'];
+const ICON_PALETTE = [
+  '⭐', '❗', '❓', '✅', '❌', '⚠️', '💡', '📌', '🚩', '❤️', '⏰', '🔥', '👍', '👎', '🔒', '📎', '🎯', '🏆',
+  // 원 안에 표시되는 숫자 0~9
+  '⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨',
+  // 사람 모양
+  '👤', '🧑', '👨', '👩',
+  // 기타: 폭탄, 노트, 마법봉, 돋보기, 모래시계, 7색깔 깃발
+  '💣', '📝', '🪄', '🔍', '⏳', '🏳️‍🌈',
+];
 
 // App-level preferences (font size / default colors) — separate from the
 // map document itself, applied once up front so the very first layout
