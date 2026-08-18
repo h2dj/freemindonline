@@ -1,4 +1,4 @@
-import { toPlain, fromPlain, createDefaultRoot, makeId, addChild } from './model.js';
+import { toPlain, fromPlain, createDefaultRoot, makeId, addChild, ancestorPathText } from './model.js';
 import { computeContentBounds } from './render.js';
 
 const TABS_STORAGE_KEY = 'freemindonline.tabs.v1';
@@ -262,10 +262,18 @@ function markdownLineText(s) {
 // text`), one line per checkbox node in the order given — no heading, no
 // indentation, since pasting this into Notion (or any other
 // markdown-aware target) turns each line into its own to-do block
-// regardless of where in the original tree that node lived.
+// regardless of where in the original tree that node lived. Each item's
+// ancestor path is appended in parentheses (skipped for a checkbox on the
+// center topic itself, which has no ancestors) so a flattened list out of
+// context still says where in the map each task came from.
 export function checklistToMarkdown(nodes) {
   return nodes
-    .map((n) => `- [${n.checkbox ? 'x' : ' '}] ${markdownLineText(n.text) || '(제목 없음)'}`)
+    .map((n) => {
+      const text = markdownLineText(n.text) || '(제목 없음)';
+      const path = ancestorPathText(n);
+      const suffix = path ? ` (${path})` : '';
+      return `- [${n.checkbox ? 'x' : ' '}] ${text}${suffix}`;
+    })
     .join('\n');
 }
 
