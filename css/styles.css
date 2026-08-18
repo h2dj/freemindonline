@@ -251,6 +251,12 @@ body {
   color: var(--text);
   flex-shrink: 0;
 }
+.checklist-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .checklist-progress { font-weight: 400; color: var(--muted); }
 
 .checklist-copy-btn {
@@ -270,6 +276,14 @@ body {
 .checklist-copy-btn:hover { background: #eef2f8; border-color: #b9c2cf; }
 .checklist-copy-btn:disabled { opacity: .4; cursor: default; }
 .checklist-copy-btn:disabled:hover { background: #fff; }
+/* Stays pressed for as long as "include ancestor path" is on for copying —
+   same visual language as the other toggle buttons in this app. */
+#checklist-copy-path-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent-dark);
+  color: #fff;
+}
+#checklist-copy-path-toggle.active:hover { background: var(--accent-dark); }
 
 #checklist-actions {
   display: flex;

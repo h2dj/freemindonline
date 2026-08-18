@@ -262,15 +262,17 @@ function markdownLineText(s) {
 // text`), one line per checkbox node in the order given — no heading, no
 // indentation, since pasting this into Notion (or any other
 // markdown-aware target) turns each line into its own to-do block
-// regardless of where in the original tree that node lived. Each item's
-// ancestor path is appended in parentheses (skipped for a checkbox on the
-// center topic itself, which has no ancestors) so a flattened list out of
-// context still says where in the map each task came from.
-export function checklistToMarkdown(nodes) {
+// regardless of where in the original tree that node lived. When
+// `includePath` is on (the default), each item's ancestor path is appended
+// in parentheses (skipped for a checkbox on the center topic itself, which
+// has no ancestors) so a flattened list out of context still says where in
+// the map each task came from — off, for a plain checklist with no
+// parenthetical clutter.
+export function checklistToMarkdown(nodes, { includePath = true } = {}) {
   return nodes
     .map((n) => {
       const text = markdownLineText(n.text) || '(제목 없음)';
-      const path = ancestorPathText(n);
+      const path = includePath ? ancestorPathText(n) : '';
       const suffix = path ? ` (${path})` : '';
       return `- [${n.checkbox ? 'x' : ' '}] ${text}${suffix}`;
     })
