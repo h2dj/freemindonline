@@ -152,6 +152,21 @@ function drawEdges(root) {
   });
 }
 
+// Where a ray from `node`'s center, heading in direction (dirX, dirY),
+// exits node's axis-aligned box — i.e. the point on the box's edge facing
+// that direction. Used to pull a graphical link's curve endpoints back
+// from the node's exact center to its boundary: #nodes (opaque boxes) is
+// stacked on top of #glinks in the DOM, so a curve/arrowhead drawn all the
+// way to the center would render underneath the box and never be visible.
+function pointOnNodeBoundary(node, dirX, dirY) {
+  if (dirX === 0 && dirY === 0) return { x: node.x, y: node.y };
+  const hw = node.w / 2, hh = node.h / 2;
+  const sx = dirX !== 0 ? hw / Math.abs(dirX) : Infinity;
+  const sy = dirY !== 0 ? hh / Math.abs(dirY) : Infinity;
+  const s = Math.min(sx, sy);
+  return { x: node.x + dirX * s, y: node.y + dirY * s };
+}
+
 // Chapter 3: "Adding graphical links" — arbitrary arrows between any two
 // nodes, independent of the parent/child tree structure.
 function drawGraphicalLinks(root, links, selectedLinkId) {
@@ -187,13 +202,22 @@ function drawGraphicalLinks(root, links, selectedLinkId) {
     const to = findNode(root, link.toId);
     if (!from || !to || from.x == null || to.x == null) return; // hidden or stale
     const color = link.color || DEFAULT_LINK_COLOR;
-    const x1 = from.x, y1 = from.y, x2 = to.x, y2 = to.y;
-    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-    const dx = x2 - x1, dy = y2 - y1;
+    // Bow (the curve's control point) is still computed from the node
+    // centers, same as before, so the arc's shape doesn't change — only
+    // the two endpoints get pulled back to each node's edge afterward.
+    const cx0 = from.x, cy0 = from.y, cx1 = to.x, cy1 = to.y;
+    const mx = (cx0 + cx1) / 2, my = (cy0 + cy1) / 2;
+    const dx = cx1 - cx0, dy = cy1 - cy0;
     const len = Math.hypot(dx, dy) || 1;
     const bow = Math.min(70, len * 0.18);
     const cx = mx + (-dy / len) * bow, cy = my + (dx / len) * bow;
-    const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+    // Quadratic Bezier tangent at each endpoint points toward the control
+    // point, so that's also the direction each node's box edge is found
+    // along — this keeps the trimmed curve meeting the box at the same
+    // angle the untrimmed curve would have arrived at.
+    const start = pointOnNodeBoundary(from, cx - cx0, cy - cy0);
+    const end = pointOnNodeBoundary(to, cx - cx1, cy - cy1);
+    const d = `M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`;
 
     const g = document.createElementNS(SVG_NS, 'g');
     g.dataset.linkId = link.id;
