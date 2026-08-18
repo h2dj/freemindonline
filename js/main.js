@@ -10,7 +10,7 @@ import {
 import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
 import {
-  autosaveTabs, loadTabs, downloadJSON, parseJSONFile, exportMM, parseMM,
+  autosaveTabs, loadTabs, downloadJSON, buildJSONFile, parseJSONFile, exportMM, parseMM,
   exportMarkdown, parseMarkdown, checklistToMarkdown, exportPNG, printMap,
 } from './io.js';
 import { createHistory } from './undo.js';
@@ -638,6 +638,39 @@ const ctx = {
 
   saveJSON() { downloadJSON(state.root, state.graphicalLinks); toast('JSON 파일로 저장했습니다.'); },
 
+  // Shares the map (as this app's own JSON format, for full-fidelity
+  // round-tripping) via the OS share sheet when the browser supports
+  // sharing files — mainly mobile Safari/Chrome, where it lets the user
+  // pick Mail (or any other app, e.g. KakaoTalk) and attach the file
+  // directly. There's no web standard for attaching a file to a `mailto:`
+  // link, so on browsers without file-sharing support (most desktop
+  // browsers) this instead downloads the file and opens a pre-filled
+  // mail draft asking the user to attach what was just downloaded.
+  async shareMap() {
+    const file = buildJSONFile(state.root, state.graphicalLinks);
+    const title = state.root.text || '중심 주제';
+    const canShareFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+    if (canShareFile && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `마인드맵: ${title}`,
+          text: `"${title}" 마인드맵을 공유합니다.`,
+        });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // user cancelled the share sheet
+        console.error(e);
+        // fall through to the mailto fallback below
+      }
+    }
+    downloadJSON(state.root, state.graphicalLinks);
+    const subject = encodeURIComponent(`마인드맵: ${title}`);
+    const body = encodeURIComponent(`"${title}" 마인드맵 파일을 내려받았습니다. 이 메일에 방금 다운로드된 파일을 첨부해서 보내주세요.`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    toast('이 브라우저는 파일 공유를 지원하지 않아 파일을 내려받았습니다. 메일에 첨부해서 보내주세요.');
+  },
+
   // ---------- Chapter 3: clouds ----------
   addCloud(id) {
     const n = findNode(state.root, id);
@@ -1059,6 +1092,7 @@ document.getElementById('btn-new').onclick = () => ctx.newTab();
 document.getElementById('btn-new-tab').onclick = () => ctx.newTab();
 
 document.getElementById('btn-save').onclick = () => ctx.saveJSON();
+document.getElementById('btn-share').onclick = () => ctx.shareMap();
 
 document.getElementById('btn-open').onclick = () => document.getElementById('file-input').click();
 document.getElementById('file-input').onchange = (e) => {

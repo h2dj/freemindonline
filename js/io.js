@@ -18,6 +18,28 @@ const MM_ICON_TO_EMOJI = {
   'full-1': '1️⃣', 'full-2': '2️⃣', 'full-3': '3️⃣', star: '⭐',
 };
 
+// Every exported file (JSON/.mm/.md/PNG) is named after the map itself —
+// mindmap_<중심주제>_<날짜>.<ext> — instead of a fixed "mindmap.json" that
+// silently overwrites the last export and gives no hint what's inside.
+function sanitizeForFilename(text) {
+  const cleaned = String(text ?? '')
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '') // strip characters invalid in Windows/macOS filenames
+    .replace(/\s+/g, '_')
+    .slice(0, 60);
+  return cleaned || '중심주제';
+}
+
+function todayDateStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function mindmapFilename(rootText, ext) {
+  return `mindmap_${sanitizeForFilename(rootText)}_${todayDateStr()}.${ext}`;
+}
+
 // The document is the node tree plus the doc-level graphical-link list
 // (Chapter 3: "Adding graphical links" — arrows between arbitrary nodes,
 // not just parent/child). Serialized as { root, links }. Older saves were
@@ -95,7 +117,10 @@ export function loadTabs() {
 }
 
 function triggerDownload(content, filename, mime) {
-  const blob = new Blob([content], { type: mime });
+  triggerBlobDownload(new Blob([content], { type: mime }), filename);
+}
+
+function triggerBlobDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -106,9 +131,16 @@ function triggerDownload(content, filename, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function downloadJSON(root, graphicalLinks, filename = 'mindmap.json') {
+// A File (not just a Blob) so it can be handed directly to the Web Share
+// API's `files` option — sharing the map means sharing this app's own
+// full-fidelity JSON format, same as "저장".
+export function buildJSONFile(root, graphicalLinks, filename = mindmapFilename(root.text, 'json')) {
   const data = JSON.stringify(serializeDoc(root, graphicalLinks), null, 2);
-  triggerDownload(data, filename, 'application/json');
+  return new File([data], filename, { type: 'application/json' });
+}
+
+export function downloadJSON(root, graphicalLinks, filename = mindmapFilename(root.text, 'json')) {
+  triggerBlobDownload(buildJSONFile(root, graphicalLinks, filename), filename);
 }
 
 export function parseJSONFile(text) {
@@ -127,7 +159,7 @@ function xmlEscape(s) {
 // with the desktop FreeMind application. Every node gets an ID so graphical
 // links (<arrowlink DESTINATION="...">) can reference each other, matching
 // how real FreeMind files are structured.
-export function exportMM(root, graphicalLinks, filename = 'mindmap.mm') {
+export function exportMM(root, graphicalLinks, filename = mindmapFilename(root.text, 'mm')) {
   const linksByFrom = new Map();
   (graphicalLinks || []).forEach((l) => {
     if (!linksByFrom.has(l.fromId)) linksByFrom.set(l.fromId, []);
@@ -279,7 +311,7 @@ export function checklistToMarkdown(nodes, { includePath = true } = {}) {
     .join('\n');
 }
 
-export function exportMarkdown(root, filename = 'mindmap.md') {
+export function exportMarkdown(root, filename = mindmapFilename(root.text, 'md')) {
   const lines = [`# ${markdownLineText(root.text) || '중심 주제'}`, ''];
   function walk(node, depth) {
     node.children.forEach((c) => {
@@ -440,7 +472,7 @@ async function renderMapToCanvas(state, scale = 2) {
   return canvas;
 }
 
-export async function exportPNG(state, filename = 'mindmap.png') {
+export async function exportPNG(state, filename = mindmapFilename(state.root.text, 'png')) {
   const canvas = await renderMapToCanvas(state, 2); // 2x for a crisp, print-quality image
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('PNG 생성에 실패했습니다.');
