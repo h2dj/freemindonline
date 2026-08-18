@@ -4,7 +4,7 @@ import {
   reorderNode, canReorderNode, promoteNode, canPromoteNode, demoteNode, canDemoteNode,
   flipRootChildSide, canFlipRootChildSide, canInsertParentAbove, insertParentAbove,
   setCloud, setLink, addIcon, removeLastIcon, clearIcons, collectSubtreeIds,
-  addCheckbox, removeCheckbox, toggleCheckboxChecked, collectCheckboxNodes,
+  addCheckbox, removeCheckbox, toggleCheckboxChecked, collectCheckboxNodes, ancestorPathText,
   toPlain, fromPlain, countDescendants,
 } from './model.js';
 import { render, nextVisibleSameSide } from './render.js';
@@ -291,18 +291,6 @@ function renderTabBar() {
 
     list.appendChild(el);
   });
-}
-
-// The chain of ancestor titles from the center topic down to (but not
-// including) `node` itself, e.g. ["중심 주제", "Branch"] for a grandchild —
-// walks the live `.parent` back-references, so it always reflects the
-// node's current position even after a reparent/promote/demote.
-function ancestorPathText(node) {
-  const names = [];
-  for (let p = node.parent; p; p = p.parent) {
-    names.unshift(p.text || (p.isRoot ? '중심 주제' : '(제목 없음)'));
-  }
-  return names.join(' › ');
 }
 
 // Copies the current checklist as a flat Notion/GitHub-style Markdown task

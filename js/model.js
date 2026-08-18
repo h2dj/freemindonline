@@ -245,6 +245,21 @@ export function collectCheckboxNodes(node, out = []) {
   return out;
 }
 
+// The chain of ancestor titles from the center topic down to (but not
+// including) `node` itself, e.g. ["중심 주제", "Branch"] for a grandchild —
+// walks the live `.parent` back-references, so it always reflects the
+// node's current position even after a reparent/promote/demote. Shared by
+// the checklist panel's ancestor breadcrumb (main.js) and the
+// clipboard-copy markdown (io.js), so both describe a node's position the
+// same way.
+export function ancestorPathText(node) {
+  const names = [];
+  for (let p = node.parent; p; p = p.parent) {
+    names.unshift(p.text || (p.isRoot ? '중심 주제' : '(제목 없음)'));
+  }
+  return names.join(' › ');
+}
+
 // All node ids in `node`'s own subtree (including itself) — used to prune
 // graphical links that reference a node about to be deleted.
 export function collectSubtreeIds(node, out = []) {
