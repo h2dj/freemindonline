@@ -237,6 +237,15 @@ function drawNodes(state) {
     if (n.color) div.style.background = n.color;
     div.dataset.id = n.id;
 
+    if (n.checkbox != null) {
+      const cb = document.createElement('span');
+      cb.className = 'node-checkbox' + (n.checkbox ? ' checked' : '');
+      cb.textContent = n.checkbox ? '☑' : '☐';
+      cb.dataset.id = n.id;
+      cb.title = n.checkbox ? '완료됨 (클릭해서 해제)' : '미완료 (클릭해서 완료 처리)';
+      div.appendChild(cb);
+    }
+
     if (n.icons.length) {
       const icons = document.createElement('div');
       icons.className = 'node-icons';

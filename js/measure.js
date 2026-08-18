@@ -24,6 +24,13 @@ export function measureNode(node) {
   el.style.width = '';
   el.innerHTML = '';
 
+  if (node.checkbox != null) {
+    const cb = document.createElement('span');
+    cb.className = 'node-checkbox';
+    cb.textContent = node.checkbox ? '☑' : '☐';
+    el.appendChild(cb);
+  }
+
   if (node.icons && node.icons.length) {
     const icons = document.createElement('div');
     icons.className = 'node-icons';

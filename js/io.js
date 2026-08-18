@@ -1,4 +1,4 @@
-import { toPlain, fromPlain, createDefaultRoot, makeId } from './model.js';
+import { toPlain, fromPlain, createDefaultRoot, makeId, addChild } from './model.js';
 import { computeContentBounds } from './render.js';
 
 const TABS_STORAGE_KEY = 'freemindonline.tabs.v1';
@@ -140,6 +140,10 @@ export function exportMM(root, graphicalLinks, filename = 'mindmap.mm') {
     if (n.collapsed && n.children.length) attrs.push('FOLDED="true"');
     if (n.color) attrs.push(`BACKGROUND_COLOR="${n.color}"`);
     if (n.link) attrs.push(`LINK="${xmlEscape(n.link)}"`);
+    // Non-standard attribute — real FreeMind has no checkbox concept and
+    // simply ignores attributes it doesn't recognize, while round-tripping
+    // through this app's own .mm export/import preserves the checkbox.
+    if (n.checkbox != null) attrs.push(`CHECKBOX="${n.checkbox ? 'true' : 'false'}"`);
 
     const extra = [];
     if (n.cloud) extra.push(`<cloud COLOR="${xmlEscape(n.cloud)}"/>`);
@@ -206,6 +210,9 @@ export function parseMM(xmlText) {
       rawLinks.push({ fromId: id, toId: dest, color: ae.getAttribute('COLOR') || null, arrows });
     });
 
+    const checkboxAttr = el.getAttribute('CHECKBOX');
+    const checkbox = checkboxAttr === 'true' ? true : (checkboxAttr === 'false' ? false : null);
+
     const childEls = Array.from(el.children).filter((c) => c.tagName === 'node');
     const plain = {
       id,
@@ -216,6 +223,7 @@ export function parseMM(xmlText) {
       isRoot: !!isRootNode,
       cloud: cloudEl ? (cloudEl.getAttribute('COLOR') || '#c9d6e3') : null,
       link: el.getAttribute('LINK') || null,
+      checkbox,
       icons: iconEls
         .map((ie) => {
           const b = ie.getAttribute('BUILTIN') || '';
@@ -238,6 +246,80 @@ export function parseMM(xmlText) {
     .map((l, i) => ({ id: 'gl-' + i + '-' + Math.random().toString(36).slice(2, 6), ...l }));
 
   return { root, graphicalLinks };
+}
+
+// ---------- Markdown export/import ----------
+// A lightweight, human-readable outline format (GitHub-flavored task lists
+// for checkboxes, `[text](url)` for hyperlinks). Unlike JSON this is
+// intentionally lossy — colors, clouds, icons, and graphical links don't
+// have a natural Markdown equivalent and are dropped, same spirit as PNG
+// export/print being visual-only snapshots.
+function markdownLineText(s) {
+  return String(s ?? '').replace(/\r?\n/g, ' ').trim();
+}
+
+export function exportMarkdown(root, filename = 'mindmap.md') {
+  const lines = [`# ${markdownLineText(root.text) || '중심 주제'}`, ''];
+  function walk(node, depth) {
+    node.children.forEach((c) => {
+      const indent = '  '.repeat(depth);
+      let text = markdownLineText(c.text);
+      if (c.link) text = `[${text}](${c.link})`;
+      const box = c.checkbox != null ? `[${c.checkbox ? 'x' : ' '}] ` : '';
+      lines.push(`${indent}- ${box}${text}`);
+      walk(c, depth + 1);
+    });
+  }
+  walk(root, 0);
+  triggerDownload(lines.join('\n') + '\n', filename, 'text/markdown');
+}
+
+// Parses a Markdown outline back into a document: an optional leading `#`
+// heading becomes the center topic, and a nested bullet list (any of
+// `-`/`*`/`+`, any indentation width — depth is read from an indentation
+// stack rather than a fixed column count) becomes the tree below it.
+// `- [ ] text` / `- [x] text` restores a checkbox, and a lone
+// `[text](url)` bullet restores a hyperlink. Graphical links have no
+// Markdown equivalent, so imported documents never have any.
+export function parseMarkdown(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  let rootText = '중심 주제';
+  if (i < lines.length && /^#{1,6}\s+/.test(lines[i])) {
+    rootText = lines[i].replace(/^#{1,6}\s+/, '').trim() || rootText;
+    i++;
+  }
+  const root = createDefaultRoot();
+  root.text = rootText;
+
+  const stack = [{ indent: -1, node: root }];
+  for (; i < lines.length; i++) {
+    const m = /^(\s*)[-*+]\s+(.*)$/.exec(lines[i]);
+    if (!m) continue; // blank lines / stray prose outside the list are ignored
+    const indent = m[1].replace(/\t/g, '  ').length;
+    let content = m[2].trim();
+
+    let checkbox = null;
+    const taskMatch = /^\[([ xX])\]\s+(.*)$/.exec(content);
+    if (taskMatch) {
+      checkbox = taskMatch[1].toLowerCase() === 'x';
+      content = taskMatch[2].trim();
+    }
+
+    let text = content, link = null;
+    const linkMatch = /^\[([^\]]*)\]\(([^)]+)\)$/.exec(content);
+    if (linkMatch) { text = linkMatch[1]; link = linkMatch[2]; }
+
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+    const parent = stack[stack.length - 1].node;
+    const node = addChild(parent, text || '새 노드');
+    if (checkbox != null) node.checkbox = checkbox;
+    if (link) node.link = link;
+    stack.push({ indent, node });
+  }
+
+  return { root, graphicalLinks: [] };
 }
 
 // Exports the whole map (regardless of current pan/zoom) as a PNG image, by

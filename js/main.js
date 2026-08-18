@@ -2,13 +2,17 @@ import {
   createDefaultRoot, addChild, addSiblingAfter, deleteSubtree, toggleCollapse,
   reparentNode, findNode, moveSelectionHorizontal, makeId,
   reorderNode, canReorderNode, promoteNode, canPromoteNode, demoteNode, canDemoteNode,
-  flipRootChildSide, canFlipRootChildSide,
+  flipRootChildSide, canFlipRootChildSide, canInsertParentAbove, insertParentAbove,
   setCloud, setLink, addIcon, removeLastIcon, clearIcons, collectSubtreeIds,
+  addCheckbox, removeCheckbox, toggleCheckboxChecked, collectCheckboxNodes,
   toPlain, fromPlain, countDescendants,
 } from './model.js';
 import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
-import { autosaveTabs, loadTabs, downloadJSON, parseJSONFile, exportMM, parseMM, exportPNG, printMap } from './io.js';
+import {
+  autosaveTabs, loadTabs, downloadJSON, parseJSONFile, exportMM, parseMM,
+  exportMarkdown, parseMarkdown, exportPNG, printMap,
+} from './io.js';
 import { createHistory } from './undo.js';
 import {
   loadSettings, saveSettings, applySettings,
@@ -254,6 +258,44 @@ function renderTabBar() {
   });
 }
 
+// Checklist panel: whenever the active tab's document has at least one
+// checkbox node, the left sidebar automatically shows them all as a
+// checklist (regardless of collapsed state, so a task hidden inside a
+// folded branch is still tracked). Empty tree → panel stays hidden, so it
+// never takes up space for a document that isn't using checkboxes.
+function renderChecklist() {
+  const nodes = collectCheckboxNodes(state.root);
+  const sidebar = document.getElementById('checklist-sidebar');
+  const list = document.getElementById('checklist-list');
+  if (!nodes.length) {
+    sidebar.classList.add('hidden');
+    list.innerHTML = '';
+    return;
+  }
+  sidebar.classList.remove('hidden');
+  const doneCount = nodes.filter((n) => n.checkbox).length;
+  document.getElementById('checklist-progress').textContent = `${doneCount}/${nodes.length}`;
+  list.innerHTML = '';
+  nodes.forEach((n) => {
+    const row = document.createElement('div');
+    row.className = 'checklist-item'
+      + (n.checkbox ? ' checked' : '')
+      + (n.id === state.selectedId ? ' selected' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!n.checkbox;
+    cb.title = '완료 표시';
+    cb.onclick = (e) => { e.stopPropagation(); ctx.toggleCheckboxChecked(n.id); };
+    row.appendChild(cb);
+    const label = document.createElement('span');
+    label.className = 'checklist-text';
+    label.textContent = n.text || '(제목 없음)';
+    row.appendChild(label);
+    row.onclick = () => ctx.select(n.id);
+    list.appendChild(row);
+  });
+}
+
 // Keeps the active tab's entry in `tabs` in sync with what's on screen
 // before persisting — otherwise the array only reflects a tab's state as
 // of the last time it was switched *away from*, not live edits.
@@ -269,6 +311,7 @@ function rerenderAll() {
   updateUndoRedoButtons();
   updateIconSidebar();
   renderTabBar();
+  renderChecklist();
   saveTabs();
 }
 
@@ -278,6 +321,7 @@ const ctx = {
     state.selectedId = id;
     render(state);
     updateIconSidebar();
+    renderChecklist(); // keeps the checklist panel's "selected" highlight in sync
   },
 
   toggleCollapse(id) {
@@ -306,6 +350,20 @@ const ctx = {
     state.selectedId = c.id;
     rerenderAll();
     this.startEdit(c.id);
+  },
+
+  // Shift+Insert: wraps the selected node with a brand-new parent node,
+  // taking its old spot in the tree — the reverse of "promote".
+  insertParent() {
+    const n = findNode(state.root, state.selectedId);
+    if (!n) return;
+    if (!canInsertParentAbove(n)) { toast('중심 주제 위에는 상위 노드를 만들 수 없습니다.'); return; }
+    history.push();
+    const wrapper = insertParentAbove(n, '새 노드');
+    if (!wrapper) { history.discardLast(); return; }
+    state.selectedId = wrapper.id;
+    rerenderAll();
+    this.startEdit(wrapper.id);
   },
 
   deleteSelected() {
@@ -517,6 +575,29 @@ const ctx = {
     rerenderAll();
   },
 
+  // ---------- Checkboxes / checklist ----------
+  addCheckbox(id) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    history.push();
+    addCheckbox(n);
+    rerenderAll();
+  },
+  removeCheckbox(id) {
+    const n = findNode(state.root, id);
+    if (!n || n.checkbox == null) return;
+    history.push();
+    removeCheckbox(n);
+    rerenderAll();
+  },
+  toggleCheckboxChecked(id) {
+    const n = findNode(state.root, id);
+    if (!n || n.checkbox == null) return;
+    history.push();
+    toggleCheckboxChecked(n);
+    rerenderAll();
+  },
+
   // ---------- Chapter 3: graphical links ----------
   startLinkMode(id) {
     state.linkSourceId = id;
@@ -605,6 +686,11 @@ const ctx = {
     if (canPromoteNode(n)) items.push(['◀ 상위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
     else if (canFlipRootChildSide(n)) items.push(['⇄ 반대편으로 이동', () => this.changeLevel(n.side === 'left' ? 'right' : 'left')]);
     if (canDemoteNode(n)) items.push(['▶ 하위 레벨로 이동', () => this.changeLevel(n.side === 'left' ? 'left' : 'right')]);
+    if (canInsertParentAbove(n)) items.push(['⬆ 새 상위 노드 만들기 (Shift+Insert)', () => this.insertParent()]);
+    if (n.parent) items.push(['🗂 새 탭에서 중심 주제로 열기', () => this.openInNewTab(id)]);
+
+    if (n.checkbox == null) items.push(['☑ 체크박스 추가', () => this.addCheckbox(id)]);
+    else items.push(['☑ 체크박스 제거', () => this.removeCheckbox(id)]);
 
     if (!n.cloud) items.push(['☁ 구름 추가 (Ctrl+Shift+J)', () => this.addCloud(id)]);
     else {
@@ -721,6 +807,39 @@ const ctx = {
       renderTabBar();
     }
   },
+  // Opens a copy of the selected node's whole subtree as a new tab, with
+  // that node promoted to be the new tab's center topic — a non-destructive
+  // "focus" that leaves the original tab untouched. Node ids are kept as-is
+  // (so it stays traceable back to the source), and graphical links carry
+  // over only when both of their endpoints are inside the copied subtree.
+  openInNewTab(id) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    if (!n.parent) { toast('이미 이 탭의 중심 주제입니다.'); return; }
+    if (state.editingId) this.commitEdit();
+    const oldTab = tabs.find((t) => t.id === activeTabId);
+    if (oldTab) snapshotStateIntoTab(oldTab);
+
+    const plain = toPlain(n);
+    plain.isRoot = true;
+    plain.side = null;
+    const newRoot = fromPlain(plain);
+    const subtreeIds = new Set(collectSubtreeIds(n));
+    const newLinks = state.graphicalLinks
+      .filter((l) => subtreeIds.has(l.fromId) && subtreeIds.has(l.toId))
+      .map((l) => ({ ...l }));
+
+    const tab = {
+      id: makeId(), root: newRoot, graphicalLinks: newLinks,
+      selectedId: newRoot.id, pan: { x: 0, y: 0 }, zoom: 1, history: makeHistory(),
+    };
+    tabs.push(tab);
+    activeTabId = tab.id;
+    loadTabIntoState(tab);
+    rerenderAll();
+    centerOnRoot();
+    toast('새 탭에서 중심 주제로 열었습니다.');
+  },
 
   setColor(color) {
     const n = findNode(state.root, state.selectedId);
@@ -808,6 +927,8 @@ document.getElementById('file-input').onchange = (e) => {
 
 document.getElementById('btn-export-mm').onclick = () => { exportMM(state.root, state.graphicalLinks); toast('.mm 파일로 내보냈습니다.'); };
 document.getElementById('btn-import-mm').onclick = () => document.getElementById('mm-input').click();
+document.getElementById('btn-export-md').onclick = () => { exportMarkdown(state.root); toast('마크다운(.md)으로 내보냈습니다.'); };
+document.getElementById('btn-import-md').onclick = () => document.getElementById('md-input').click();
 document.getElementById('btn-export-png').onclick = async () => {
   const btn = document.getElementById('btn-export-png');
   btn.disabled = true;
@@ -839,6 +960,29 @@ document.getElementById('mm-input').onchange = (e) => {
       toast('.mm 파일을 불러왔습니다.');
     } catch (err) {
       alert('.mm 파일을 읽을 수 없습니다: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+};
+document.getElementById('md-input').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      history.push();
+      const parsed = parseMarkdown(reader.result);
+      state.root = parsed.root;
+      state.graphicalLinks = parsed.graphicalLinks;
+      state.linkSourceId = null;
+      state.selectedLinkId = null;
+      state.selectedId = state.root.id;
+      rerenderAll();
+      centerOnRoot();
+      toast('마크다운(.md) 파일을 불러왔습니다.');
+    } catch (err) {
+      alert('마크다운 파일을 읽을 수 없습니다: ' + err.message);
     }
   };
   reader.readAsText(file);
