@@ -37,7 +37,17 @@ export function setupCanvasInteractions(state, ctx) {
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('.glink-hit')) return; // handled on click; no pan/drag from a link
-    if (e.target.closest('.link-badge')) return; // handled on click; selecting/dragging here would rebuild the DOM mid-click
+    // Handled on click, same as .glink-hit above — and for the same reason
+    // that matters here beyond just "no pan/drag from this element":
+    // selecting on mousedown would call render() and rebuild #nodes before
+    // mouseup fires, and a mousedown/mouseup pair that lands on two
+    // different DOM nodes (the old one, then its freshly-rebuilt
+    // replacement at the same spot) doesn't reliably produce a 'click'
+    // event in Chromium — so the toggle/open/etc. these elements exist for
+    // would silently never fire.
+    if (e.target.closest('.link-badge')) return;
+    if (e.target.closest('.fold-toggle')) return;
+    if (e.target.closest('.node-checkbox')) return;
     const nodeEl = e.target.closest('.node-box');
     if (nodeEl) {
       const id = nodeEl.dataset.id;
@@ -118,6 +128,12 @@ export function setupCanvasInteractions(state, ctx) {
     const foldEl = e.target.closest('.fold-toggle');
     if (foldEl) {
       ctx.toggleCollapse(foldEl.dataset.id);
+      e.stopPropagation();
+      return;
+    }
+    const checkboxEl = e.target.closest('.node-checkbox');
+    if (checkboxEl) {
+      ctx.toggleCheckboxChecked(checkboxEl.dataset.id);
       e.stopPropagation();
       return;
     }
@@ -224,6 +240,13 @@ export function setupCanvasInteractions(state, ctx) {
     if (foldEl) {
       e.preventDefault();
       ctx.toggleCollapse(foldEl.dataset.id);
+      return;
+    }
+
+    const checkboxEl = t.target.closest?.('.node-checkbox');
+    if (checkboxEl) {
+      e.preventDefault();
+      ctx.toggleCheckboxChecked(checkboxEl.dataset.id);
       return;
     }
 
@@ -335,6 +358,7 @@ export function setupKeyboard(state, ctx) {
     if (editing) {
       if (e.key === 'Escape') { ctx.cancelEdit(); e.preventDefault(); }
       else if (e.key === 'Enter' && !e.shiftKey) { ctx.commitEdit(); e.preventDefault(); }
+      else if (e.key === 'Insert' && e.shiftKey) { e.preventDefault(); ctx.commitEdit(); ctx.insertParent(); }
       else if (e.key === 'Insert') { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
       return;
     }
@@ -380,6 +404,8 @@ export function setupKeyboard(state, ctx) {
         default: break;
       }
     }
+
+    if (e.shiftKey && e.key === 'Insert') { e.preventDefault(); ctx.insertParent(); return; }
 
     switch (e.key) {
       case 'Insert': e.preventDefault(); ctx.addChild(); break;

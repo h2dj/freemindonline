@@ -23,6 +23,8 @@ export function createNode(text, parent, side) {
     cloud: null,
     link: null,
     icons: [],
+    // null = no checkbox on this node; true/false = checkbox present, checked or not.
+    checkbox: null,
   };
 }
 
@@ -178,6 +180,25 @@ export function toggleCollapse(node) {
   if (node.children.length) node.collapsed = !node.collapsed;
 }
 
+// Inserts a brand-new node directly above `node` in the tree: the new node
+// takes `node`'s old spot among its parent's children (same side, same
+// position), and `node` becomes its sole child. Not possible for the root,
+// which has no parent to insert anything between.
+export function canInsertParentAbove(node) {
+  return !!node.parent;
+}
+
+export function insertParentAbove(node, text = '새 노드') {
+  if (!canInsertParentAbove(node)) return null;
+  const parent = node.parent;
+  const idx = parent.children.indexOf(node);
+  const wrapper = createNode(text, parent, node.side);
+  parent.children[idx] = wrapper;
+  wrapper.children = [node];
+  node.parent = wrapper;
+  return wrapper;
+}
+
 // ---------- Chapter 3: clouds, hyperlinks, icons ----------
 
 export function setCloud(node, color) {
@@ -198,6 +219,30 @@ export function removeLastIcon(node) {
 
 export function clearIcons(node) {
   node.icons.length = 0;
+}
+
+// ---------- Checkboxes / checklist ----------
+
+export function addCheckbox(node) {
+  node.checkbox = false; // freshly added checkboxes start unchecked
+}
+
+export function removeCheckbox(node) {
+  node.checkbox = null;
+}
+
+export function toggleCheckboxChecked(node) {
+  if (node.checkbox == null) return;
+  node.checkbox = !node.checkbox;
+}
+
+// Every node in the tree that currently has a checkbox, in document order —
+// regardless of collapsed state, since the checklist panel is meant to
+// surface tasks even while their branch is folded away on the canvas.
+export function collectCheckboxNodes(node, out = []) {
+  if (node.checkbox != null) out.push(node);
+  node.children.forEach((c) => collectCheckboxNodes(c, out));
+  return out;
 }
 
 // All node ids in `node`'s own subtree (including itself) — used to prune
@@ -256,6 +301,7 @@ export function toPlain(node) {
     cloud: node.cloud || null,
     link: node.link || null,
     icons: node.icons.slice(),
+    checkbox: typeof node.checkbox === 'boolean' ? node.checkbox : null,
     children: node.children.map(toPlain),
   };
 }
@@ -273,6 +319,7 @@ export function fromPlain(plain, parent = null) {
     cloud: plain.cloud || null,
     link: plain.link || null,
     icons: Array.isArray(plain.icons) ? plain.icons.slice() : [],
+    checkbox: typeof plain.checkbox === 'boolean' ? plain.checkbox : null,
   };
   node.children = (plain.children || []).map((c) => fromPlain(c, node));
   return node;

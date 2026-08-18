@@ -54,11 +54,14 @@
   <button id="btn-save" title="JSON으로 저장 (Ctrl+S)">💾 저장</button>
   <button id="btn-export-mm" title="FreeMind(.mm)로 내보내기">⇩ .mm 내보내기</button>
   <button id="btn-import-mm" title="FreeMind(.mm) 가져오기">⇧ .mm 가져오기</button>
+  <button id="btn-export-md" title="마크다운(.md)으로 내보내기">⇩ .md 내보내기</button>
+  <button id="btn-import-md" title="마크다운(.md) 가져오기">⇧ .md 가져오기</button>
   <button id="btn-export-png" title="PNG 이미지로 내보내기">🖼 PNG 내보내기</button>
   <button id="btn-print" title="인쇄 (Ctrl+P)">🖨 인쇄</button>
   <button id="btn-settings" title="설정">⚙ 설정</button>
   <input type="file" id="file-input" accept=".json,application/json" hidden>
   <input type="file" id="mm-input" accept=".mm,application/xml,text/xml" hidden>
+  <input type="file" id="md-input" accept=".md,text/markdown,text/plain" hidden>
 </div>
 
 <div id="tab-bar">
@@ -67,6 +70,14 @@
 </div>
 
 <div id="body-row">
+  <aside id="checklist-sidebar" class="hidden" title="체크박스가 있는 노드 목록">
+    <div class="checklist-header">
+      <span>✅ 체크리스트</span>
+      <span id="checklist-progress" class="checklist-progress"></span>
+    </div>
+    <div id="checklist-list"></div>
+  </aside>
+
   <aside id="icon-sidebar" title="선택한 노드에 아이콘 추가">
     <div class="icon-sidebar-header">
       <button id="icon-sidebar-toggle" class="icon-sidebar-toggle" title="아이콘 패널 접기/펼치기" aria-label="아이콘 패널 접기/펼치기">◀</button>
@@ -120,7 +131,7 @@
 
 <footer id="statusbar">
   <span id="status-text">FreeMind Online</span>
-  <span class="hint">Insert 하위 노드 · Enter 형제 노드 · F2 편집 · Delete 삭제 · Space 접기/펼치기 · 방향키 이동 · Ctrl+↑↓ 순서 변경 · Ctrl+←→ 레벨 변경 · Ctrl+K 링크 걸기 · Ctrl+Shift+J 구름 켜기/끄기 · 드래그로 이동/재배치 · 휠로 확대·축소 · 우클릭 메뉴에서 구름/링크/아이콘/화살표 링크 · Ctrl+P 인쇄 · ☰ 메뉴에서 파일/설정</span>
+  <span class="hint">Insert 하위 노드 · Shift+Insert 상위 노드 · Enter 형제 노드 · F2 편집 · Delete 삭제 · Space 접기/펼치기 · 방향키 이동 · Ctrl+↑↓ 순서 변경 · Ctrl+←→ 레벨 변경 · Ctrl+K 링크 걸기 · Ctrl+Shift+J 구름 켜기/끄기 · 드래그로 이동/재배치 · 휠로 확대·축소 · 우클릭 메뉴에서 구름/링크/아이콘/체크박스/화살표 링크/새 탭 · Ctrl+P 인쇄 · ☰ 메뉴에서 파일/설정</span>
 </footer>
 
 <script type="module" src="js/main.js"></script>

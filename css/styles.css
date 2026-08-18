@@ -203,13 +203,77 @@ body {
 }
 #btn-new-tab:hover { background: #eef2f8; border-color: #b9c2cf; }
 
-/* ---------- Body row: icon sidebar + canvas, side by side ---------- */
+/* ---------- Body row: checklist + icon sidebar + canvas, side by side ---------- */
 #body-row {
   display: flex;
   flex-direction: row;
   flex: 1;
   min-height: 0; /* let children size within the flex column above, instead of forcing the page to grow */
   overflow: hidden;
+}
+
+/* Auto-appears (see #checklist-sidebar.hidden) the moment the active tab's
+   document has at least one checkbox node, and disappears again once it
+   has none — so it never takes up space for a map that isn't using
+   checkboxes. */
+#checklist-sidebar {
+  flex-shrink: 0;
+  width: 220px;
+  max-width: 40vw;
+  background: var(--toolbar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#checklist-sidebar.hidden { display: none; }
+
+.checklist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.checklist-progress { font-weight: 400; color: var(--muted); }
+
+#checklist-list {
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.checklist-item:hover { background: #eef2f8; }
+.checklist-item.selected { background: #e2e8f0; }
+.checklist-item input[type="checkbox"] {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.checklist-text {
+  overflow-wrap: break-word;
+  color: var(--text);
+}
+.checklist-item.checked .checklist-text {
+  color: var(--muted);
+  text-decoration: line-through;
 }
 
 #icon-sidebar {
@@ -403,6 +467,18 @@ body {
   margin-right: 4px;
   font-size: 1em;
 }
+
+.node-checkbox {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 1.05em;
+  line-height: 1;
+  vertical-align: -.1em;
+  cursor: pointer;
+}
+.node-checkbox.checked { color: #16a34a; }
+.node-box.root-box .node-checkbox { color: #fff; }
+.node-box.root-box .node-checkbox.checked { color: #bbf7d0; }
 
 /* A colored number badge (Chapter 3 icons '#1'..'#9') — white digit on a
    per-number background, since no single emoji glyph can be recolored. */
@@ -701,6 +777,9 @@ body {
   .tab { padding: 8px 8px 8px 12px; font-size: 13px; max-width: 130px; }
   .tab-close { width: 22px; height: 22px; font-size: 15px; }
   #btn-new-tab { width: 30px; height: 30px; font-size: 17px; }
+
+  #checklist-sidebar { width: 55vw; }
+  .checklist-item input[type="checkbox"] { width: 18px; height: 18px; }
 
   .fold-toggle {
     width: 24px;
