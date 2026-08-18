@@ -11,7 +11,7 @@ import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
 import {
   autosaveTabs, loadTabs, downloadJSON, parseJSONFile, exportMM, parseMM,
-  exportMarkdown, parseMarkdown, exportPNG, printMap,
+  exportMarkdown, parseMarkdown, checklistToMarkdown, exportPNG, printMap,
 } from './io.js';
 import { createHistory } from './undo.js';
 import {
@@ -305,6 +305,39 @@ function ancestorPathText(node) {
   return names.join(' › ');
 }
 
+// Copies the current checklist as a flat Notion/GitHub-style Markdown task
+// list, so it can be pasted straight into Notion (or any other
+// markdown-aware target) as a matching set of to-do blocks. Prefers the
+// async Clipboard API; falls back to the classic hidden-textarea +
+// execCommand('copy') trick for contexts where that API is missing or
+// blocked, since this whole app otherwise avoids depending on it working.
+async function copyChecklistToClipboard() {
+  const nodes = collectCheckboxNodes(state.root);
+  if (!nodes.length) return;
+  const text = checklistToMarkdown(nodes);
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('체크리스트를 마크다운으로 복사했습니다.');
+    return;
+  } catch (e) {
+    // fall through to the legacy fallback below
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('체크리스트를 마크다운으로 복사했습니다.');
+  } catch (e) {
+    console.error(e);
+    toast('클립보드 복사에 실패했습니다.');
+  }
+}
+
 // Checklist panel: whenever the active tab's document has at least one
 // checkbox node, the left sidebar automatically shows them all as a
 // checklist (regardless of collapsed state, so a task hidden inside a
@@ -329,6 +362,7 @@ function renderChecklist() {
   const stampBtn = document.getElementById('checklist-stamp-mode');
   stampBtn.classList.toggle('active', !!state.checkboxStampMode);
   stampBtn.setAttribute('aria-pressed', String(!!state.checkboxStampMode));
+  document.getElementById('checklist-copy').disabled = !hasCheckboxes;
 
   if (!shouldShow) {
     sidebar.classList.add('hidden');
@@ -1162,6 +1196,7 @@ document.getElementById('checklist-stamp-mode').onclick = () => {
   if (state.checkboxStampMode) toast('노드를 선택하면 체크박스가 자동으로 추가됩니다. 다시 눌러 끄세요.');
   renderChecklist();
 };
+document.getElementById('checklist-copy').onclick = () => copyChecklistToClipboard();
 
 rerenderAll();
 // A tab with a real saved pan (i.e. it was actually viewed/panned before —
