@@ -36,6 +36,11 @@
       <button id="btn-zoom-in" title="확대">+</button>
     </div>
 
+    <div class="toolbar-group panel-group">
+      <button id="btn-toggle-icon-sidebar" class="panel-toggle" title="아이콘 패널 보이기/숨기기" aria-pressed="true">🧩</button>
+      <button id="btn-toggle-checklist" class="panel-toggle" title="체크리스트 패널 보이기/숨기기" aria-pressed="false">✅</button>
+    </div>
+
     <div class="toolbar-group color-group" id="color-group" title="선택한 노드 색상">
       <span class="color-label">색상</span>
       <button class="swatch" data-color="" style="background:#ffffff" title="기본"></button>
@@ -79,8 +84,9 @@
   </aside>
 
   <aside id="icon-sidebar" title="선택한 노드에 아이콘 추가">
-    <div class="icon-sidebar-header">
-      <button id="icon-sidebar-toggle" class="icon-sidebar-toggle" title="아이콘 패널 접기/펼치기" aria-label="아이콘 패널 접기/펼치기">◀</button>
+    <div id="icon-sidebar-actions">
+      <button id="icon-remove-last" title="선택한 노드의 마지막 아이콘 제거" aria-label="마지막 아이콘 제거">⌫</button>
+      <button id="icon-remove-all" title="선택한 노드의 아이콘 모두 제거" aria-label="아이콘 모두 제거">🗑</button>
     </div>
     <div id="icon-sidebar-grid"></div>
   </aside>
@@ -120,6 +126,10 @@
       <div class="setting-row">
         <span class="setting-row-label">중심 주제(강조) 색상</span>
         <div class="setting-control swatch-row" id="setting-accent-color"></div>
+      </div>
+      <div class="setting-row setting-row-inline">
+        <label class="setting-row-label" for="setting-icon-sidebar-visible">아이콘 사이드바 기본으로 보이기</label>
+        <input type="checkbox" id="setting-icon-sidebar-visible">
       </div>
     </div>
     <div class="modal-footer">
