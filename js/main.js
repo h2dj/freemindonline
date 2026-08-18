@@ -56,6 +56,14 @@ let history = null;
 let tabs = [];
 let activeTabId = null;
 
+// Sidebar show/hide is plain UI chrome, not document state — it isn't tied
+// to any particular tab. The icon sidebar's default comes from `settings`
+// (see settings.js) so it's a real persisted preference; the checklist
+// panel is otherwise fully automatic (shows itself whenever the active
+// tab has checkbox nodes), so it only needs a one-off "user closed it"
+// flag rather than a saved setting.
+let checklistManuallyHidden = false;
+
 function makeHistory() {
   return createHistory(
     () => ({
@@ -192,6 +200,7 @@ function refreshSettingsUI() {
     ctx.setSetting({ accent: preset.value, accentDark: preset.dark });
     refreshSettingsUI();
   });
+  document.getElementById('setting-icon-sidebar-visible').checked = settings.iconSidebarVisible !== false;
 }
 
 // Left icon sidebar: lets a single click on any icon add it straight to
@@ -223,6 +232,23 @@ function buildIconSidebar() {
 function updateIconSidebar() {
   const disabled = !state.selectedId;
   document.querySelectorAll('#icon-sidebar-grid button').forEach((btn) => { btn.disabled = disabled; });
+  const n = state.selectedId ? findNode(state.root, state.selectedId) : null;
+  const hasIcons = !!(n && n.icons.length);
+  document.getElementById('icon-remove-last').disabled = !hasIcons;
+  document.getElementById('icon-remove-all').disabled = !hasIcons;
+}
+
+// Applies settings.iconSidebarVisible to the actual DOM/toolbar-button
+// state. Called at startup and any time that setting changes (toolbar
+// toggle, settings modal checkbox, or "restore defaults") so all three
+// controls always agree with each other immediately, not just after a
+// reload.
+function applyIconSidebarVisibility() {
+  const visible = settings.iconSidebarVisible !== false;
+  document.getElementById('icon-sidebar').classList.toggle('collapsed', !visible);
+  const btn = document.getElementById('btn-toggle-icon-sidebar');
+  btn.classList.toggle('active', visible);
+  btn.setAttribute('aria-pressed', String(visible));
 }
 
 function tabTitle(tab, rootText) {
@@ -258,16 +284,37 @@ function renderTabBar() {
   });
 }
 
+// The chain of ancestor titles from the center topic down to (but not
+// including) `node` itself, e.g. ["중심 주제", "Branch"] for a grandchild —
+// walks the live `.parent` back-references, so it always reflects the
+// node's current position even after a reparent/promote/demote.
+function ancestorPathText(node) {
+  const names = [];
+  for (let p = node.parent; p; p = p.parent) {
+    names.unshift(p.text || (p.isRoot ? '중심 주제' : '(제목 없음)'));
+  }
+  return names.join(' › ');
+}
+
 // Checklist panel: whenever the active tab's document has at least one
 // checkbox node, the left sidebar automatically shows them all as a
 // checklist (regardless of collapsed state, so a task hidden inside a
-// folded branch is still tracked). Empty tree → panel stays hidden, so it
-// never takes up space for a document that isn't using checkboxes.
+// folded branch is still tracked) — unless the user has manually hidden it
+// via the toolbar toggle (see checklistManuallyHidden), which sticks until
+// they toggle it back on. Empty tree → toggle button disables itself, since
+// there'd be nothing to show either way.
 function renderChecklist() {
   const nodes = collectCheckboxNodes(state.root);
   const sidebar = document.getElementById('checklist-sidebar');
   const list = document.getElementById('checklist-list');
-  if (!nodes.length) {
+  const toggleBtn = document.getElementById('btn-toggle-checklist');
+  const hasCheckboxes = nodes.length > 0;
+  toggleBtn.disabled = !hasCheckboxes;
+  const shouldShow = hasCheckboxes && !checklistManuallyHidden;
+  toggleBtn.classList.toggle('active', shouldShow);
+  toggleBtn.setAttribute('aria-pressed', String(shouldShow));
+
+  if (!shouldShow) {
     sidebar.classList.add('hidden');
     list.innerHTML = '';
     return;
@@ -277,21 +324,38 @@ function renderChecklist() {
   document.getElementById('checklist-progress').textContent = `${doneCount}/${nodes.length}`;
   list.innerHTML = '';
   nodes.forEach((n) => {
+    const isSelected = n.id === state.selectedId;
     const row = document.createElement('div');
-    row.className = 'checklist-item'
-      + (n.checkbox ? ' checked' : '')
-      + (n.id === state.selectedId ? ' selected' : '');
+    row.className = 'checklist-item' + (n.checkbox ? ' checked' : '') + (isSelected ? ' selected' : '');
+    row.onclick = () => ctx.select(n.id);
+
+    const line = document.createElement('div');
+    line.className = 'checklist-row';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = !!n.checkbox;
     cb.title = '완료 표시';
     cb.onclick = (e) => { e.stopPropagation(); ctx.toggleCheckboxChecked(n.id); };
-    row.appendChild(cb);
+    line.appendChild(cb);
     const label = document.createElement('span');
     label.className = 'checklist-text';
     label.textContent = n.text || '(제목 없음)';
-    row.appendChild(label);
-    row.onclick = () => ctx.select(n.id);
+    line.appendChild(label);
+    row.appendChild(line);
+
+    // Ancestor breadcrumb — only under the item that's currently selected,
+    // so clicking a row reveals where it sits in the tree without
+    // cluttering every other row.
+    if (isSelected) {
+      const pathText = ancestorPathText(n);
+      if (pathText) {
+        const path = document.createElement('div');
+        path.className = 'checklist-path';
+        path.textContent = pathText;
+        row.appendChild(path);
+      }
+    }
+
     list.appendChild(row);
   });
 }
@@ -872,12 +936,14 @@ const ctx = {
     settings = { ...settings, ...patch };
     saveSettings(settings);
     applySettings(settings);
+    applyIconSidebarVisibility();
     render(state); // re-measures/re-lays-out nodes at the new font size
   },
   resetSettings() {
     settings = { ...DEFAULT_SETTINGS };
     saveSettings(settings);
     applySettings(settings);
+    applyIconSidebarVisibility();
     render(state);
     refreshSettingsUI();
   },
@@ -1022,15 +1088,28 @@ fontSizeInput.onchange = (e) => ctx.setSetting({ fontSize: parseInt(e.target.val
 window.addEventListener('resize', applyTransform);
 
 buildIconSidebar();
-document.getElementById('icon-sidebar-toggle').onclick = () => {
-  document.getElementById('icon-sidebar').classList.toggle('collapsed');
+document.getElementById('icon-remove-last').onclick = () => {
+  if (state.selectedId) ctx.removeLastIcon(state.selectedId);
 };
-// Start collapsed on narrow/touch screens, where a persistent 200px-wide
-// sidebar would eat too much of the already-tight canvas — still just one
-// tap away via the toggle either way.
-if (window.matchMedia('(max-width: 640px), (pointer: coarse)').matches) {
-  document.getElementById('icon-sidebar').classList.add('collapsed');
-}
+document.getElementById('icon-remove-all').onclick = () => {
+  if (state.selectedId) ctx.clearIcons(state.selectedId);
+};
+
+// Icon sidebar's shown/hidden state now lives entirely in settings (see
+// applyIconSidebarVisibility) — this button and the settings-modal
+// checkbox are just two different places to flip the same value.
+document.getElementById('btn-toggle-icon-sidebar').onclick = () => {
+  ctx.setSetting({ iconSidebarVisible: settings.iconSidebarVisible === false });
+};
+document.getElementById('setting-icon-sidebar-visible').onchange = (e) => {
+  ctx.setSetting({ iconSidebarVisible: e.target.checked });
+};
+applyIconSidebarVisibility();
+
+document.getElementById('btn-toggle-checklist').onclick = () => {
+  checklistManuallyHidden = !checklistManuallyHidden;
+  renderChecklist();
+};
 
 rerenderAll();
 // A tab with a real saved pan (i.e. it was actually viewed/panned before —

@@ -34,6 +34,12 @@ export const DEFAULT_SETTINGS = {
   nodeBg: NODE_COLOR_PRESETS[0].value,
   accent: ACCENT_COLOR_PRESETS[0].value,
   accentDark: ACCENT_COLOR_PRESETS[0].dark,
+  // Whether the icon sidebar starts expanded on load. A plain UI-chrome
+  // preference (like fontSize/colors above) rather than something the map
+  // document itself needs to remember, so it lives here — the toolbar's
+  // show/hide button changes this same value, it doesn't just toggle a
+  // one-off runtime flag.
+  iconSidebarVisible: true,
 };
 
 export function loadSettings() {
