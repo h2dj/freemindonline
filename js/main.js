@@ -71,6 +71,10 @@ let activeTabId = null;
 // it that way, which then sticks regardless of checkbox count (or which
 // tab is active) until toggled again.
 let checklistVisibilityOverride = null;
+// Whether "📋 복사" includes each item's ancestor path in parentheses —
+// toggled via the "🧭" button next to it. Same app-wide, not-per-tab, not
+// persisted treatment as the visibility override above.
+let checklistCopyIncludePath = true;
 
 function makeHistory() {
   return createHistory(
@@ -302,7 +306,7 @@ function renderTabBar() {
 async function copyChecklistToClipboard() {
   const nodes = collectCheckboxNodes(state.root);
   if (!nodes.length) return;
-  const text = checklistToMarkdown(nodes);
+  const text = checklistToMarkdown(nodes, { includePath: checklistCopyIncludePath });
   try {
     await navigator.clipboard.writeText(text);
     toast('체크리스트를 마크다운으로 복사했습니다.');
@@ -351,6 +355,9 @@ function renderChecklist() {
   stampBtn.classList.toggle('active', !!state.checkboxStampMode);
   stampBtn.setAttribute('aria-pressed', String(!!state.checkboxStampMode));
   document.getElementById('checklist-copy').disabled = !hasCheckboxes;
+  const pathToggleBtn = document.getElementById('checklist-copy-path-toggle');
+  pathToggleBtn.classList.toggle('active', checklistCopyIncludePath);
+  pathToggleBtn.setAttribute('aria-pressed', String(checklistCopyIncludePath));
 
   if (!shouldShow) {
     sidebar.classList.add('hidden');
@@ -1185,6 +1192,10 @@ document.getElementById('checklist-stamp-mode').onclick = () => {
   renderChecklist();
 };
 document.getElementById('checklist-copy').onclick = () => copyChecklistToClipboard();
+document.getElementById('checklist-copy-path-toggle').onclick = () => {
+  checklistCopyIncludePath = !checklistCopyIncludePath;
+  renderChecklist();
+};
 
 rerenderAll();
 // A tab with a real saved pan (i.e. it was actually viewed/panned before —
