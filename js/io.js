@@ -258,6 +258,17 @@ function markdownLineText(s) {
   return String(s ?? '').replace(/\r?\n/g, ' ').trim();
 }
 
+// A flat GitHub/Notion-style Markdown task list (`- [ ] text` / `- [x]
+// text`), one line per checkbox node in the order given — no heading, no
+// indentation, since pasting this into Notion (or any other
+// markdown-aware target) turns each line into its own to-do block
+// regardless of where in the original tree that node lived.
+export function checklistToMarkdown(nodes) {
+  return nodes
+    .map((n) => `- [${n.checkbox ? 'x' : ' '}] ${markdownLineText(n.text) || '(제목 없음)'}`)
+    .join('\n');
+}
+
 export function exportMarkdown(root, filename = 'mindmap.md') {
   const lines = [`# ${markdownLineText(root.text) || '중심 주제'}`, ''];
   function walk(node, depth) {

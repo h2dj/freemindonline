@@ -253,6 +253,24 @@ body {
 }
 .checklist-progress { font-weight: 400; color: var(--muted); }
 
+.checklist-copy-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text);
+  touch-action: manipulation;
+  transition: background .12s, border-color .12s;
+}
+.checklist-copy-btn:hover { background: #eef2f8; border-color: #b9c2cf; }
+.checklist-copy-btn:disabled { opacity: .4; cursor: default; }
+.checklist-copy-btn:disabled:hover { background: #fff; }
+
 #checklist-actions {
   display: flex;
   gap: 6px;
@@ -871,6 +889,7 @@ body {
   #checklist-sidebar { width: 55vw; }
   .checklist-item input[type="checkbox"] { width: 18px; height: 18px; }
   #checklist-actions button { padding: 9px 4px; font-size: 12.5px; min-height: 38px; }
+  .checklist-copy-btn { width: 30px; height: 30px; font-size: 14px; }
 
   .fold-toggle {
     width: 24px;
