@@ -156,6 +156,31 @@ function centerOnRoot() {
   applyTransform();
 }
 
+// Pans (without touching zoom, unlike centerOnRoot) so that the given
+// node sits at the center of the canvas viewport. Every node's x/y is a
+// world coordinate relative to the root at (0,0) (see layout.js) and
+// #world is transformed as translate(pan) scale(zoom) from that origin,
+// so centering node (nx, ny) just means solving
+// pan + (nx, ny) * zoom = viewport center for pan.
+function centerOnNode(id) {
+  const n = findNode(state.root, id);
+  if (!n || n.x == null) return; // no layout yet (e.g. called before the first render)
+  const rect = document.getElementById('canvas').getBoundingClientRect();
+  state.pan.x = rect.width / 2 - n.x * state.zoom;
+  state.pan.y = rect.height / 2 - n.y * state.zoom;
+  applyTransform();
+}
+
+// Mobile/touch screens are small enough that a newly added node can easily
+// land outside the visible canvas — re-centering on it there (but not on
+// desktop, where the extra viewport space usually keeps it in view anyway,
+// and an unrequested re-center while working across a wider layout would
+// just be disruptive) keeps every new node visible right as you start
+// typing its text. Same breakpoint as the CSS mobile/touch layout rules.
+function isMobileView() {
+  return window.matchMedia('(max-width: 640px), (pointer: coarse)').matches;
+}
+
 function updateUndoRedoButtons() {
   document.getElementById('btn-undo').disabled = !history.canUndo();
   document.getElementById('btn-redo').disabled = !history.canRedo();
@@ -467,6 +492,7 @@ const ctx = {
     const c = addChild(n, '새 노드');
     state.selectedId = c.id;
     rerenderAll();
+    if (isMobileView()) centerOnNode(c.id);
     this.startEdit(c.id);
   },
 
@@ -477,6 +503,7 @@ const ctx = {
     const c = addSiblingAfter(n, '새 노드');
     state.selectedId = c.id;
     rerenderAll();
+    if (isMobileView()) centerOnNode(c.id);
     this.startEdit(c.id);
   },
 
@@ -491,6 +518,7 @@ const ctx = {
     if (!wrapper) { history.discardLast(); return; }
     state.selectedId = wrapper.id;
     rerenderAll();
+    if (isMobileView()) centerOnNode(wrapper.id);
     this.startEdit(wrapper.id);
   },
 
