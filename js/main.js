@@ -50,6 +50,11 @@ applySettings(settings);
 const state = {
   root: null, graphicalLinks: null, selectedId: null, editingId: null,
   linkSourceId: null, selectedLinkId: null, settingsOpen: false,
+  // While on, selecting any node (click or arrow-key navigation) stamps a
+  // checkbox onto it automatically — see ctx.maybeStampCheckbox. A
+  // short-lived interaction mode like linkSourceId, not document state, so
+  // it resets on every tab switch (see loadTabIntoState).
+  checkboxStampMode: false,
   pan: { x: 0, y: 0 }, zoom: 1,
 };
 let history = null;
@@ -59,10 +64,13 @@ let activeTabId = null;
 // Sidebar show/hide is plain UI chrome, not document state — it isn't tied
 // to any particular tab. The icon sidebar's default comes from `settings`
 // (see settings.js) so it's a real persisted preference; the checklist
-// panel is otherwise fully automatic (shows itself whenever the active
-// tab has checkbox nodes), so it only needs a one-off "user closed it"
-// flag rather than a saved setting.
-let checklistManuallyHidden = false;
+// panel doesn't need that much permanence, just a tri-state override of
+// its own automatic "show once the tab has checkbox nodes" default: null
+// means no explicit user choice yet (follow the automatic behavior),
+// 'shown'/'hidden' means the user last clicked the toolbar toggle to force
+// it that way, which then sticks regardless of checkbox count (or which
+// tab is active) until toggled again.
+let checklistVisibilityOverride = null;
 
 function makeHistory() {
   return createHistory(
@@ -106,6 +114,7 @@ function loadTabIntoState(tab) {
   state.editingId = null;
   state.linkSourceId = null;
   state.selectedLinkId = null;
+  state.checkboxStampMode = false;
   state.pan = { x: tab.pan.x, y: tab.pan.y };
   state.zoom = tab.zoom;
   history = tab.history;
@@ -299,20 +308,27 @@ function ancestorPathText(node) {
 // Checklist panel: whenever the active tab's document has at least one
 // checkbox node, the left sidebar automatically shows them all as a
 // checklist (regardless of collapsed state, so a task hidden inside a
-// folded branch is still tracked) — unless the user has manually hidden it
-// via the toolbar toggle (see checklistManuallyHidden), which sticks until
-// they toggle it back on. Empty tree → toggle button disables itself, since
-// there'd be nothing to show either way.
+// folded branch is still tracked). The toolbar toggle button is always
+// clickable (not just once checkboxes exist — see checklistVisibilityOverride)
+// so the panel itself can be opened first, to use its own "add a checkbox"
+// buttons on a document that doesn't have any yet.
 function renderChecklist() {
   const nodes = collectCheckboxNodes(state.root);
   const sidebar = document.getElementById('checklist-sidebar');
   const list = document.getElementById('checklist-list');
   const toggleBtn = document.getElementById('btn-toggle-checklist');
   const hasCheckboxes = nodes.length > 0;
-  toggleBtn.disabled = !hasCheckboxes;
-  const shouldShow = hasCheckboxes && !checklistManuallyHidden;
+  const shouldShow = checklistVisibilityOverride === 'shown' ? true
+    : checklistVisibilityOverride === 'hidden' ? false
+    : hasCheckboxes;
   toggleBtn.classList.toggle('active', shouldShow);
   toggleBtn.setAttribute('aria-pressed', String(shouldShow));
+
+  const selectedNode = state.selectedId ? findNode(state.root, state.selectedId) : null;
+  document.getElementById('checklist-add-one').disabled = !selectedNode || selectedNode.checkbox != null;
+  const stampBtn = document.getElementById('checklist-stamp-mode');
+  stampBtn.classList.toggle('active', !!state.checkboxStampMode);
+  stampBtn.setAttribute('aria-pressed', String(!!state.checkboxStampMode));
 
   if (!shouldShow) {
     sidebar.classList.add('hidden');
@@ -320,6 +336,12 @@ function renderChecklist() {
     return;
   }
   sidebar.classList.remove('hidden');
+
+  if (!hasCheckboxes) {
+    document.getElementById('checklist-progress').textContent = '';
+    list.innerHTML = '<div class="checklist-empty">아직 체크박스가 없습니다.<br>위 버튼으로 추가해 보세요.</div>';
+    return;
+  }
   const doneCount = nodes.filter((n) => n.checkbox).length;
   document.getElementById('checklist-progress').textContent = `${doneCount}/${nodes.length}`;
   list.innerHTML = '';
@@ -386,6 +408,19 @@ const ctx = {
     render(state);
     updateIconSidebar();
     renderChecklist(); // keeps the checklist panel's "selected" highlight in sync
+    this.maybeStampCheckbox(id);
+  },
+
+  // Continuous checkbox-adding mode (checkboxStampMode, toggled from the
+  // checklist panel's "📌 연속 추가" button): every subsequent selection
+  // change stamps a checkbox onto whatever just got selected, as long as it
+  // doesn't already have one — so re-visiting an already-checked node (e.g.
+  // stepping back and forth with arrow keys) never resets its checked state.
+  maybeStampCheckbox(id) {
+    if (!state.checkboxStampMode || !id) return;
+    const n = findNode(state.root, id);
+    if (!n || n.checkbox != null) return;
+    this.addCheckbox(id);
   },
 
   toggleCollapse(id) {
@@ -483,6 +518,8 @@ const ctx = {
     state.selectedId = target.id;
     render(state);
     updateIconSidebar();
+    renderChecklist();
+    this.maybeStampCheckbox(target.id);
   },
 
   // dir: -1 moves the node earlier among its siblings, +1 moves it later.
@@ -1107,7 +1144,22 @@ document.getElementById('setting-icon-sidebar-visible').onchange = (e) => {
 applyIconSidebarVisibility();
 
 document.getElementById('btn-toggle-checklist').onclick = () => {
-  checklistManuallyHidden = !checklistManuallyHidden;
+  const currentlyShown = checklistVisibilityOverride === 'shown' ? true
+    : checklistVisibilityOverride === 'hidden' ? false
+    : collectCheckboxNodes(state.root).length > 0;
+  checklistVisibilityOverride = currentlyShown ? 'hidden' : 'shown';
+  renderChecklist();
+};
+
+document.getElementById('checklist-add-one').onclick = () => {
+  if (!state.selectedId) return;
+  const n = findNode(state.root, state.selectedId);
+  if (!n || n.checkbox != null) return;
+  ctx.addCheckbox(state.selectedId);
+};
+document.getElementById('checklist-stamp-mode').onclick = () => {
+  state.checkboxStampMode = !state.checkboxStampMode;
+  if (state.checkboxStampMode) toast('노드를 선택하면 체크박스가 자동으로 추가됩니다. 다시 눌러 끄세요.');
   renderChecklist();
 };
 
