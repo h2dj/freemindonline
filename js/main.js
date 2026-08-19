@@ -462,19 +462,28 @@ const ctx = {
     render(state);
     updateIconSidebar();
     renderChecklist(); // keeps the checklist panel's "selected" highlight in sync
-    this.maybeStampCheckbox(id);
   },
 
   // Continuous checkbox-adding mode (checkboxStampMode, toggled from the
-  // checklist panel's "📌 연속 추가" button): every subsequent selection
-  // change stamps a checkbox onto whatever just got selected, as long as it
-  // doesn't already have one — so re-visiting an already-checked node (e.g.
-  // stepping back and forth with arrow keys) never resets its checked state.
-  maybeStampCheckbox(id) {
+  // checklist panel's "📌 연속 추가" button). Deliberately NOT wired into
+  // select() itself — it's only called from interactions.js's two primary
+  // click/tap-to-select handlers, so it fires for a genuine click on a
+  // node but not for a right-click (opening the context menu also selects
+  // first), a checklist-row click (every row already has a checkbox, so
+  // toggling there would silently delete whichever task you clicked to
+  // look at), or arrow-key navigation (moveSelect calls this too, but
+  // without toggleExisting — stepping back and forth over an
+  // already-checked node while browsing shouldn't erase it).
+  //
+  // opts.toggleExisting: if the clicked node already has a checkbox,
+  // remove it instead of leaving it untouched — lets a user un-stamp a
+  // node by clicking it again without leaving stamp mode.
+  maybeStampCheckbox(id, opts = {}) {
     if (!state.checkboxStampMode || !id) return;
     const n = findNode(state.root, id);
-    if (!n || n.checkbox != null) return;
-    this.addCheckbox(id);
+    if (!n) return;
+    if (n.checkbox == null) { this.addCheckbox(id); return; }
+    if (opts.toggleExisting) this.removeCheckbox(id);
   },
 
   toggleCollapse(id) {
@@ -1250,7 +1259,7 @@ document.getElementById('checklist-add-one').onclick = () => {
 };
 document.getElementById('checklist-stamp-mode').onclick = () => {
   state.checkboxStampMode = !state.checkboxStampMode;
-  if (state.checkboxStampMode) toast('노드를 선택하면 체크박스가 자동으로 추가됩니다. 다시 눌러 끄세요.');
+  if (state.checkboxStampMode) toast('노드를 클릭하면 체크박스가 추가/제거됩니다. 다시 눌러 끄세요.');
   renderChecklist();
 };
 document.getElementById('checklist-copy').onclick = () => copyChecklistToClipboard();

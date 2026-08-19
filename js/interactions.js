@@ -54,6 +54,7 @@ export function setupCanvasInteractions(state, ctx) {
       const alreadyEditingThis = state.editingId === id && e.target.closest('.node-text');
       if (!alreadyEditingThis) {
         ctx.select(id);
+        ctx.maybeStampCheckbox(id, { toggleExisting: true });
       }
       if (alreadyEditingThis) return; // let native text caret placement happen
       nodeDrag = { id, startX: e.clientX, startY: e.clientY, moved: false };
@@ -254,7 +255,10 @@ export function setupCanvasInteractions(state, ctx) {
     if (nodeEl) {
       const id = nodeEl.dataset.id;
       const alreadyEditingThis = state.editingId === id && t.target.closest('.node-text');
-      if (!alreadyEditingThis) ctx.select(id);
+      if (!alreadyEditingThis) {
+        ctx.select(id);
+        ctx.maybeStampCheckbox(id, { toggleExisting: true });
+      }
       if (alreadyEditingThis) return; // let native caret placement / keyboard happen
       nodeDrag = { id, startX: t.clientX, startY: t.clientY, moved: false, longPressFired: false };
       clearTimeout(longPressTimer);
