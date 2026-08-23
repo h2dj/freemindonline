@@ -51,7 +51,7 @@ python3 -m http.server 8000
 
 | 동작 | 단축키 |
 | --- | --- |
-| 하위 노드 추가 | `Insert` |
+| 하위 노드 추가 | `Insert` 또는 `Tab` |
 | 새 상위 노드 끼워 넣기 | `Shift+Insert` |
 | 형제 노드 추가 | `Enter` |
 | 선택한 노드 편집 | `F2` 또는 더블클릭 |

@@ -363,7 +363,7 @@ export function setupKeyboard(state, ctx) {
       if (e.key === 'Escape') { ctx.cancelEdit(); e.preventDefault(); }
       else if (e.key === 'Enter' && !e.shiftKey) { ctx.commitEdit(); e.preventDefault(); }
       else if (e.key === 'Insert' && e.shiftKey) { e.preventDefault(); ctx.commitEdit(); ctx.insertParent(); }
-      else if (e.key === 'Insert') { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
+      else if ((e.key === 'Insert' || e.key === 'Tab') && !e.shiftKey) { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
       return;
     }
     if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
@@ -410,9 +410,10 @@ export function setupKeyboard(state, ctx) {
     }
 
     if (e.shiftKey && e.key === 'Insert') { e.preventDefault(); ctx.insertParent(); return; }
+    if (e.shiftKey && e.key === 'Tab') return; // let the browser handle it; only plain Tab is an Insert alias
 
     switch (e.key) {
-      case 'Insert': e.preventDefault(); ctx.addChild(); break;
+      case 'Insert': case 'Tab': e.preventDefault(); ctx.addChild(); break;
       case 'Enter': e.preventDefault(); ctx.addSibling(); break;
       case 'F2': e.preventDefault(); ctx.startEdit(state.selectedId); break;
       case 'Delete': case 'Backspace': e.preventDefault(); ctx.deleteSelected(); break;
