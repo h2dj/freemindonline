@@ -21,7 +21,7 @@
     </div>
 
     <div class="toolbar-group">
-      <button id="btn-add-child" title="하위 노드 추가 (Insert 또는 Tab)">➕ 하위</button>
+      <button id="btn-add-child" title="하위 노드 추가 (Insert)">➕ 하위</button>
       <button id="btn-add-sibling" title="형제 노드 추가 (Enter)">➕ 형제</button>
       <button id="btn-delete" title="노드 삭제 (Delete)">🗑 삭제</button>
       <button id="btn-undo" title="실행 취소 (Ctrl+Z)">↶</button>
@@ -140,6 +140,14 @@
         <label class="setting-row-label" for="setting-icon-sidebar-visible">아이콘 사이드바 기본으로 보이기</label>
         <input type="checkbox" id="setting-icon-sidebar-visible">
       </div>
+      <div class="setting-row">
+        <span class="setting-row-label">키보드 종류</span>
+        <div class="setting-control setting-toggle-group" id="setting-keyboard-layout">
+          <button type="button" data-layout="windows">🪟 Windows</button>
+          <button type="button" data-layout="mac">🍎 Mac</button>
+        </div>
+        <span class="setting-row-hint">하위 노드 추가 단축키에 영향을 줍니다 — Insert 키는 항상 되고, Windows를 고르면 Tab 키는 원래대로 두고, Mac을 고르면 Tab 키로도 하위 노드가 추가됩니다(Mac 키보드에는 Insert 키가 없어서).</span>
+      </div>
     </div>
     <div class="modal-footer">
       <button id="settings-reset" title="모든 설정을 기본값으로 되돌립니다">기본값으로 되돌리기</button>
@@ -150,7 +158,7 @@
 
 <footer id="statusbar">
   <span id="status-text">FreeMind Online</span>
-  <span class="hint">Insert/Tab 하위 노드 · Shift+Insert 상위 노드 · Enter 형제 노드 · F2 편집 · Delete 삭제 · Space 접기/펼치기 · 방향키 이동 · Ctrl+↑↓ 순서 변경 · Ctrl+←→ 레벨 변경 · Ctrl+K 링크 걸기 · Ctrl+Shift+J 구름 켜기/끄기 · 드래그로 이동/재배치 · 휠로 확대·축소 · 우클릭 메뉴에서 구름/링크/아이콘/체크박스/화살표 링크/새 탭 · Ctrl+P 인쇄 · ☰ 메뉴에서 파일/설정</span>
+  <span class="hint">Insert 하위 노드 · Shift+Insert 상위 노드 · Enter 형제 노드 · F2 편집 · Delete 삭제 · Space 접기/펼치기 · 방향키 이동 · Ctrl+↑↓ 순서 변경 · Ctrl+←→ 레벨 변경 · Ctrl+K 링크 걸기 · Ctrl+Shift+J 구름 켜기/끄기 · 드래그로 이동/재배치 · 휠로 확대·축소 · 우클릭 메뉴에서 구름/링크/아이콘/체크박스/화살표 링크/새 탭 · Ctrl+P 인쇄 · ☰ 메뉴에서 파일/설정</span>
 </footer>
 
 <script type="module" src="js/main.js"></script>

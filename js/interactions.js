@@ -363,7 +363,10 @@ export function setupKeyboard(state, ctx) {
       if (e.key === 'Escape') { ctx.cancelEdit(); e.preventDefault(); }
       else if (e.key === 'Enter' && !e.shiftKey) { ctx.commitEdit(); e.preventDefault(); }
       else if (e.key === 'Insert' && e.shiftKey) { e.preventDefault(); ctx.commitEdit(); ctx.insertParent(); }
-      else if ((e.key === 'Insert' || e.key === 'Tab') && !e.shiftKey) { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
+      else if (e.key === 'Insert') { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
+      // Tab only doubles as Insert under the Mac keyboard-layout setting —
+      // see settings.js's keyboardLayout doc comment for why.
+      else if (e.key === 'Tab' && !e.shiftKey && ctx.isMacKeyboardLayout()) { e.preventDefault(); ctx.commitEdit(); ctx.addChild(); }
       return;
     }
     if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
@@ -410,10 +413,15 @@ export function setupKeyboard(state, ctx) {
     }
 
     if (e.shiftKey && e.key === 'Insert') { e.preventDefault(); ctx.insertParent(); return; }
-    if (e.shiftKey && e.key === 'Tab') return; // let the browser handle it; only plain Tab is an Insert alias
+    // Tab only doubles as Insert under the Mac keyboard-layout setting —
+    // see settings.js's keyboardLayout doc comment for why. Any other Tab
+    // press (Shift+Tab, or plain Tab on the Windows layout) is left alone
+    // so the browser's normal focus-move behavior still works.
+    if (e.key === 'Tab' && !e.shiftKey && ctx.isMacKeyboardLayout()) { e.preventDefault(); ctx.addChild(); return; }
+    if (e.key === 'Tab') return;
 
     switch (e.key) {
-      case 'Insert': case 'Tab': e.preventDefault(); ctx.addChild(); break;
+      case 'Insert': e.preventDefault(); ctx.addChild(); break;
       case 'Enter': e.preventDefault(); ctx.addSibling(); break;
       case 'F2': e.preventDefault(); ctx.startEdit(state.selectedId); break;
       case 'Delete': case 'Backspace': e.preventDefault(); ctx.deleteSelected(); break;

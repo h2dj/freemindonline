@@ -29,6 +29,19 @@ export const ACCENT_COLOR_PRESETS = [
 export const FONT_SIZE_MIN = 11;
 export const FONT_SIZE_MAX = 20;
 
+// Best-effort guess for the very first load, before the user has ever
+// touched the setting — Mac keyboards have no physical Insert key at all,
+// so defaulting Mac users straight to 'mac' (Tab) saves them from landing
+// on a shortcut they can't press. Anyone can still flip it in Settings.
+function detectDefaultKeyboardLayout() {
+  try {
+    const platform = (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || '');
+    return /mac/i.test(platform) ? 'mac' : 'windows';
+  } catch {
+    return 'windows';
+  }
+}
+
 export const DEFAULT_SETTINGS = {
   fontSize: 14,
   nodeBg: NODE_COLOR_PRESETS[0].value,
@@ -40,6 +53,12 @@ export const DEFAULT_SETTINGS = {
   // show/hide button changes this same value, it doesn't just toggle a
   // one-off runtime flag.
   iconSidebarVisible: true,
+  // 'windows' | 'mac' — which key doubles as the "add child node" shortcut
+  // alongside Insert (which always works, on both). Only 'mac' also treats
+  // a bare Tab as Insert, since Mac keyboards don't have an Insert key;
+  // 'windows' leaves Tab alone so it keeps its normal browser focus-move
+  // behavior instead of being hijacked for everyone regardless of platform.
+  keyboardLayout: detectDefaultKeyboardLayout(),
 };
 
 export function loadSettings() {

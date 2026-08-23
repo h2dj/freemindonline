@@ -239,6 +239,9 @@ function refreshSettingsUI() {
     refreshSettingsUI();
   });
   document.getElementById('setting-icon-sidebar-visible').checked = settings.iconSidebarVisible !== false;
+  document.querySelectorAll('#setting-keyboard-layout button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.layout === settings.keyboardLayout);
+  });
 }
 
 // Left icon sidebar: lets a single click on any icon add it straight to
@@ -287,6 +290,18 @@ function applyIconSidebarVisibility() {
   const btn = document.getElementById('btn-toggle-icon-sidebar');
   btn.classList.toggle('active', visible);
   btn.setAttribute('aria-pressed', String(visible));
+}
+
+// Keeps the "add child" tooltip and the status-bar shortcut hint truthful
+// about whether Tab currently does anything — it only does on the Mac
+// keyboard layout (see settings.js). Called at startup and any time the
+// setting changes, same as applyIconSidebarVisibility above.
+function applyKeyboardLayoutHints() {
+  const mac = settings.keyboardLayout === 'mac';
+  const addChildKeys = mac ? 'Insert 또는 Tab' : 'Insert';
+  document.getElementById('btn-add-child').title = `하위 노드 추가 (${addChildKeys})`;
+  const hint = document.querySelector('#statusbar .hint');
+  if (hint) hint.textContent = hint.textContent.replace(/^(Insert(\/Tab)?)(?= 하위 노드)/, addChildKeys);
 }
 
 function tabTitle(tab, rootText) {
@@ -1073,6 +1088,7 @@ const ctx = {
     saveSettings(settings);
     applySettings(settings);
     applyIconSidebarVisibility();
+    applyKeyboardLayoutHints();
     render(state); // re-measures/re-lays-out nodes at the new font size
   },
   resetSettings() {
@@ -1080,8 +1096,14 @@ const ctx = {
     saveSettings(settings);
     applySettings(settings);
     applyIconSidebarVisibility();
+    applyKeyboardLayoutHints();
     render(state);
     refreshSettingsUI();
+  },
+  // Read by interactions.js's keyboard handler to decide whether a bare Tab
+  // doubles as Insert (see settings.js's keyboardLayout doc comment).
+  isMacKeyboardLayout() {
+    return settings.keyboardLayout === 'mac';
   },
 };
 
@@ -1242,6 +1264,14 @@ document.getElementById('setting-icon-sidebar-visible').onchange = (e) => {
   ctx.setSetting({ iconSidebarVisible: e.target.checked });
 };
 applyIconSidebarVisibility();
+applyKeyboardLayoutHints();
+
+document.querySelectorAll('#setting-keyboard-layout button').forEach((btn) => {
+  btn.onclick = () => {
+    ctx.setSetting({ keyboardLayout: btn.dataset.layout });
+    refreshSettingsUI();
+  };
+});
 
 document.getElementById('btn-toggle-checklist').onclick = () => {
   const currentlyShown = checklistVisibilityOverride === 'shown' ? true
