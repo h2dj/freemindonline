@@ -512,6 +512,11 @@ const ctx = {
   addChild() {
     const n = findNode(state.root, state.selectedId);
     if (!n) return;
+    // Insert/Tab can fire while the right-click context menu is still open
+    // (it doesn't take a click to trigger, so the menu never got the
+    // click-outside-closes-it treatment) — close it so it doesn't linger
+    // pointing at the node the user just moved on from.
+    this.hideContextMenu();
     history.push();
     const c = addChild(n, '새 노드');
     state.selectedId = c.id;
