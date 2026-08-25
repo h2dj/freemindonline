@@ -59,10 +59,11 @@ export const DEFAULT_SETTINGS = {
   // 'windows' leaves Tab alone so it keeps its normal browser focus-move
   // behavior instead of being hijacked for everyone regardless of platform.
   keyboardLayout: detectDefaultKeyboardLayout(),
-  // When on, node boxes render with no border (relying on the background
-  // color + drop shadow alone for definition) — a flatter "bubble" look as
-  // an alternative to the default outlined style.
-  nodeBorderless: false,
+  // 'bordered' | 'borderless' | 'underline' — the node box style:
+  // 'bordered' is the default outlined box; 'borderless' keeps the box
+  // (background + shadow) but drops the border line; 'underline' drops the
+  // box entirely and just underlines the text, FreeMind-"fork"-style.
+  nodeStyle: 'bordered',
 };
 
 export function loadSettings() {
@@ -70,7 +71,15 @@ export function loadSettings() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    // Migrate the old boolean-only "테두리 없는 스타일" checkbox (before
+    // this became a 3-way choice) so anyone who already flipped it doesn't
+    // lose their preference.
+    if (parsed.nodeStyle == null && typeof parsed.nodeBorderless === 'boolean') {
+      merged.nodeStyle = parsed.nodeBorderless ? 'borderless' : 'bordered';
+    }
+    delete merged.nodeBorderless;
+    return merged;
   } catch (e) {
     console.warn('failed to load settings', e);
     return { ...DEFAULT_SETTINGS };
@@ -95,5 +104,13 @@ export function applySettings(settings) {
   root.style.setProperty('--node-bg', settings.nodeBg);
   root.style.setProperty('--accent', settings.accent);
   root.style.setProperty('--accent-dark', settings.accentDark);
-  root.style.setProperty('--node-border-width', settings.nodeBorderless ? '0px' : '1.5px');
+  // A class rather than a custom property (unlike the plain values above)
+  // since 'underline' needs several properties to change at once (no
+  // background/shadow/radius, a border-bottom instead) — see styles.css's
+  // .node-style-borderless/.node-style-underline rules. Measure.js's probe
+  // lives under <body> too, so it picks up the very same cascade and
+  // measures pixel-consistent with what render.js actually paints.
+  root.classList.remove('node-style-borderless', 'node-style-underline');
+  if (settings.nodeStyle === 'borderless') root.classList.add('node-style-borderless');
+  else if (settings.nodeStyle === 'underline') root.classList.add('node-style-underline');
 }

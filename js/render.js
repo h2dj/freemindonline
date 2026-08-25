@@ -241,7 +241,7 @@ function drawGraphicalLinks(root, links, selectedLinkId) {
 }
 
 function drawNodes(state) {
-  const { root, selectedId, editingId, linkSourceId } = state;
+  const { root, selectedId, editingId, linkSourceId, nodeStyle } = state;
   const layer = document.getElementById('nodes');
   layer.innerHTML = '';
   const list = [];
@@ -258,7 +258,12 @@ function drawNodes(state) {
     div.style.left = n.x + 'px';
     div.style.top = n.y + 'px';
     div.style.width = n.w + 'px';
-    if (n.color) div.style.background = n.color;
+    // In 'underline' style there's no box to fill — repoint a custom node
+    // color to the underline itself instead of silently dropping it.
+    if (n.color) {
+      if (nodeStyle === 'underline') div.style.borderBottomColor = n.color;
+      else div.style.background = n.color;
+    }
     div.dataset.id = n.id;
 
     if (n.image) {

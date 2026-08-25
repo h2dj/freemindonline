@@ -9,7 +9,6 @@
   --accent-dark: #1d4ed8;
   --node-bg: #ffffff;
   --node-border: #c7cdd6;
-  --node-border-width: 1.5px;
   --edge: #94a3b8;
   --node-font-size: 14px;
 }
@@ -526,7 +525,7 @@ body {
   max-width: 220px;
   transform: translate(-50%, -50%);
   background: var(--node-bg);
-  border: var(--node-border-width) solid var(--node-border);
+  border: 1.5px solid var(--node-border);
   border-radius: 10px;
   padding: 7px 13px;
   font-size: var(--node-font-size);
@@ -570,6 +569,39 @@ body {
 
 .node-box.has-link {
   cursor: pointer;
+}
+
+/* ---------- Node style setting: borderless / underline ----------
+   (see settings.js's applySettings — the modifier class lives on <html>,
+   not on individual node boxes, so it cascades to every node uniformly
+   including the measure.js probe, which is also appended under <body>.) */
+.node-style-borderless .node-box {
+  border-width: 0;
+}
+
+/* No box at all — just the text, underlined, sitting directly on the
+   canvas (FreeMind's classic "fork" node look). render.js repoints a
+   node's custom color (n.color) to border-bottom-color instead of
+   background in this mode, so a colored node still shows *something*
+   instead of the color silently disappearing. */
+.node-style-underline .node-box {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 2px 2px 3px;
+  border-bottom: 1.5px solid var(--node-border);
+}
+.node-style-underline .node-box.root-box {
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent-dark);
+  box-shadow: none;
+}
+.node-style-underline .node-box.selected {
+  box-shadow: none; /* the filled halo reads as a box; the outline alone still marks selection */
+}
+.node-style-underline .node-box.collapsed {
+  border-bottom-style: dashed;
 }
 
 .node-icons {
@@ -797,6 +829,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .setting-control input[type="range"] { flex: 1; }
 .setting-value {

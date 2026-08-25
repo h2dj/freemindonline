@@ -57,6 +57,13 @@ const state = {
   // it resets on every tab switch (see loadTabIntoState).
   checkboxStampMode: false,
   pan: { x: 0, y: 0 }, zoom: 1,
+  // Mirrors settings.nodeStyle (see settings.js) — kept on `state` itself,
+  // not just read from the module-level `settings` variable, because
+  // render.js only ever receives `state` and has no dependency on
+  // settings.js. Kept in sync by ctx.setSetting/resetSettings; never
+  // touched by loadTabIntoState since it's an app-wide preference, not
+  // per-tab document state.
+  nodeStyle: settings.nodeStyle,
 };
 let history = null;
 let tabs = [];
@@ -243,7 +250,9 @@ function refreshSettingsUI() {
     ctx.setSetting({ accent: preset.value, accentDark: preset.dark });
     refreshSettingsUI();
   });
-  document.getElementById('setting-node-borderless').checked = !!settings.nodeBorderless;
+  document.querySelectorAll('#setting-node-style button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.style === settings.nodeStyle);
+  });
   document.getElementById('setting-icon-sidebar-visible').checked = settings.iconSidebarVisible !== false;
   document.querySelectorAll('#setting-keyboard-layout button').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.layout === settings.keyboardLayout);
@@ -1204,7 +1213,8 @@ const ctx = {
     applySettings(settings);
     applyIconSidebarVisibility();
     applyKeyboardLayoutHints();
-    render(state); // re-measures/re-lays-out nodes at the new font size
+    state.nodeStyle = settings.nodeStyle;
+    render(state); // re-measures/re-lays-out nodes at the new font size/node style
   },
   resetSettings() {
     settings = { ...DEFAULT_SETTINGS };
@@ -1212,6 +1222,7 @@ const ctx = {
     applySettings(settings);
     applyIconSidebarVisibility();
     applyKeyboardLayoutHints();
+    state.nodeStyle = settings.nodeStyle;
     render(state);
     refreshSettingsUI();
   },
@@ -1384,11 +1395,15 @@ document.getElementById('btn-toggle-icon-sidebar').onclick = () => {
 document.getElementById('setting-icon-sidebar-visible').onchange = (e) => {
   ctx.setSetting({ iconSidebarVisible: e.target.checked });
 };
-document.getElementById('setting-node-borderless').onchange = (e) => {
-  ctx.setSetting({ nodeBorderless: e.target.checked });
-};
 applyIconSidebarVisibility();
 applyKeyboardLayoutHints();
+
+document.querySelectorAll('#setting-node-style button').forEach((btn) => {
+  btn.onclick = () => {
+    ctx.setSetting({ nodeStyle: btn.dataset.style });
+    refreshSettingsUI();
+  };
+});
 
 document.querySelectorAll('#setting-keyboard-layout button').forEach((btn) => {
   btn.onclick = () => {

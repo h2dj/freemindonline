@@ -452,7 +452,7 @@ async function loadAppCSS() {
 // the built-in defaults (font size, colors, borderless-node style, etc).
 function runtimeCSSOverrides() {
   const cs = getComputedStyle(document.documentElement);
-  const vars = ['--node-font-size', '--node-bg', '--accent', '--accent-dark', '--bg', '--node-border-width'];
+  const vars = ['--node-font-size', '--node-bg', '--accent', '--accent-dark', '--bg'];
   const decls = vars.map((v) => `${v}: ${cs.getPropertyValue(v).trim()};`).join(' ');
   return `:root { ${decls} }`;
 }
@@ -488,6 +488,11 @@ async function buildMapSVGMarkup(state) {
   // it just serializes the DOM tree structure as-is.
   const serializer = new XMLSerializer();
   const nodesXML = Array.from(nodesClone.children).map((el) => serializer.serializeToString(el)).join('');
+  // The .node-style-borderless/.node-style-underline rules (styles.css)
+  // are scoped by an ancestor class normally living on the live page's
+  // <html> — this exported SVG is its own isolated document, so that class
+  // has to be re-applied to this fragment's own root element instead.
+  const nodeStyleClass = state.nodeStyle && state.nodeStyle !== 'bordered' ? ` class="node-style-${state.nodeStyle}"` : '';
 
   const markup = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
@@ -496,7 +501,7 @@ async function buildMapSVGMarkup(state) {
     `<rect x="0" y="0" width="${width}" height="${height}" fill="${bg}"/>`,
     `<g transform="translate(${dx}, ${dy})">${clouds}${edges}${glinks}</g>`,
     `<foreignObject x="0" y="0" width="${width}" height="${height}">`,
-    `<div xmlns="http://www.w3.org/1999/xhtml" style="position:relative; width:${width}px; height:${height}px;">`,
+    `<div xmlns="http://www.w3.org/1999/xhtml"${nodeStyleClass} style="position:relative; width:${width}px; height:${height}px;">`,
     `<div style="position:absolute; left:${dx}px; top:${dy}px;">${nodesXML}</div>`,
     `</div>`,
     `</foreignObject>`,
