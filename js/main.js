@@ -11,7 +11,7 @@ import { render, nextVisibleSameSide } from './render.js';
 import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interactions.js';
 import {
   autosaveTabs, loadTabs, downloadJSON, buildJSONFile, parseJSONFile, exportMM, parseMM,
-  exportMarkdown, parseMarkdown, checklistToMarkdown, exportPNG, printMap,
+  exportMarkdown, parseMarkdown, checklistToMarkdown, exportChecklistCSV, exportPNG, printMap,
 } from './io.js';
 import { createHistory } from './undo.js';
 import {
@@ -395,6 +395,7 @@ function renderChecklist() {
   stampBtn.classList.toggle('active', !!state.checkboxStampMode);
   stampBtn.setAttribute('aria-pressed', String(!!state.checkboxStampMode));
   document.getElementById('checklist-copy').disabled = !hasCheckboxes;
+  document.getElementById('checklist-export-csv').disabled = !hasCheckboxes;
   const pathToggleBtn = document.getElementById('checklist-copy-path-toggle');
   pathToggleBtn.classList.toggle('active', checklistCopyIncludePath);
   pathToggleBtn.setAttribute('aria-pressed', String(checklistCopyIncludePath));
@@ -1301,6 +1302,12 @@ document.getElementById('checklist-copy').onclick = () => copyChecklistToClipboa
 document.getElementById('checklist-copy-path-toggle').onclick = () => {
   checklistCopyIncludePath = !checklistCopyIncludePath;
   renderChecklist();
+};
+document.getElementById('checklist-export-csv').onclick = () => {
+  const nodes = collectCheckboxNodes(state.root);
+  if (!nodes.length) return;
+  exportChecklistCSV(state.root, nodes, undefined, { includePath: checklistCopyIncludePath });
+  toast('체크리스트를 CSV 파일로 내보냈습니다.');
 };
 
 rerenderAll();

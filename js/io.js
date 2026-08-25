@@ -286,7 +286,10 @@ export function parseMM(xmlText) {
 // intentionally lossy — colors, clouds, icons, and graphical links don't
 // have a natural Markdown equivalent and are dropped, same spirit as PNG
 // export/print being visual-only snapshots.
-function markdownLineText(s) {
+// Flattens a node's text to one line — shared by the Markdown and CSV
+// exporters below, since neither format has a cell/line-friendly way to
+// keep an embedded newline.
+function singleLineText(s) {
   return String(s ?? '').replace(/\r?\n/g, ' ').trim();
 }
 
@@ -303,7 +306,7 @@ function markdownLineText(s) {
 export function checklistToMarkdown(nodes, { includePath = true } = {}) {
   return nodes
     .map((n) => {
-      const text = markdownLineText(n.text) || '(제목 없음)';
+      const text = singleLineText(n.text) || '(제목 없음)';
       const path = includePath ? ancestorPathText(n) : '';
       const suffix = path ? ` (${path})` : '';
       return `- [${n.checkbox ? 'x' : ' '}] ${text}${suffix}`;
@@ -311,12 +314,47 @@ export function checklistToMarkdown(nodes, { includePath = true } = {}) {
     .join('\n');
 }
 
+// ---------- Checklist CSV export ----------
+// Quotes a field only when it needs it (contains a comma, quote, or
+// newline), doubling any embedded quotes — the usual minimal-quoting CSV
+// convention, so a plain cell like a done flag or short task stays
+// unquoted and readable.
+function csvField(value) {
+  const s = String(value ?? '');
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Same flat, one-row-per-checkbox-node shape as checklistToMarkdown above,
+// as a spreadsheet-friendly CSV instead: 완료 (TRUE/FALSE, which Excel and
+// Google Sheets both recognize as a boolean on import) and 할 일 columns,
+// plus an optional 상위 노드 경로 column — same includePath toggle and
+// same "no ancestors" blank as the Markdown export uses.
+export function checklistToCSV(nodes, { includePath = true } = {}) {
+  const header = includePath ? ['완료', '할 일', '상위 노드 경로'] : ['완료', '할 일'];
+  const rows = nodes.map((n) => {
+    const text = singleLineText(n.text) || '(제목 없음)';
+    const cols = [n.checkbox ? 'TRUE' : 'FALSE', text];
+    if (includePath) cols.push(ancestorPathText(n));
+    return cols;
+  });
+  return [header, ...rows].map((cols) => cols.map(csvField).join(',')).join('\r\n');
+}
+
+// A UTF-8 BOM is prepended so Excel (which otherwise guesses the file's
+// legacy codepage) opens the Korean text correctly instead of mojibake —
+// Google Sheets and other modern readers ignore a BOM either way. `root` is
+// only used for the default filename, same division of labor as the other
+// exporters below.
+export function exportChecklistCSV(root, nodes, filename = mindmapFilename(root.text, 'csv'), opts) {
+  triggerDownload('\uFEFF' + checklistToCSV(nodes, opts), filename, 'text/csv;charset=utf-8');
+}
+
 export function exportMarkdown(root, filename = mindmapFilename(root.text, 'md')) {
-  const lines = [`# ${markdownLineText(root.text) || '중심 주제'}`, ''];
+  const lines = [`# ${singleLineText(root.text) || '중심 주제'}`, ''];
   function walk(node, depth) {
     node.children.forEach((c) => {
       const indent = '  '.repeat(depth);
-      let text = markdownLineText(c.text);
+      let text = singleLineText(c.text);
       if (c.link) text = `[${text}](${c.link})`;
       const box = c.checkbox != null ? `[${c.checkbox ? 'x' : ' '}] ` : '';
       lines.push(`${indent}- ${box}${text}`);
