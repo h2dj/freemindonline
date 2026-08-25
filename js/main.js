@@ -243,6 +243,7 @@ function refreshSettingsUI() {
     ctx.setSetting({ accent: preset.value, accentDark: preset.dark });
     refreshSettingsUI();
   });
+  document.getElementById('setting-node-borderless').checked = !!settings.nodeBorderless;
   document.getElementById('setting-icon-sidebar-visible').checked = settings.iconSidebarVisible !== false;
   document.querySelectorAll('#setting-keyboard-layout button').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.layout === settings.keyboardLayout);
@@ -1382,6 +1383,9 @@ document.getElementById('btn-toggle-icon-sidebar').onclick = () => {
 };
 document.getElementById('setting-icon-sidebar-visible').onchange = (e) => {
   ctx.setSetting({ iconSidebarVisible: e.target.checked });
+};
+document.getElementById('setting-node-borderless').onchange = (e) => {
+  ctx.setSetting({ nodeBorderless: e.target.checked });
 };
 applyIconSidebarVisibility();
 applyKeyboardLayoutHints();

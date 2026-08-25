@@ -449,10 +449,10 @@ async function loadAppCSS() {
 // the live computed values here and re-declaring them (after the base
 // stylesheet, so they win) keeps exported/printed images in sync with the
 // user's font size and color settings instead of always falling back to
-// the built-in defaults.
+// the built-in defaults (font size, colors, borderless-node style, etc).
 function runtimeCSSOverrides() {
   const cs = getComputedStyle(document.documentElement);
-  const vars = ['--node-font-size', '--node-bg', '--accent', '--accent-dark', '--bg'];
+  const vars = ['--node-font-size', '--node-bg', '--accent', '--accent-dark', '--bg', '--node-border-width'];
   const decls = vars.map((v) => `${v}: ${cs.getPropertyValue(v).trim()};`).join(' ');
   return `:root { ${decls} }`;
 }

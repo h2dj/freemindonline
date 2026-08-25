@@ -59,6 +59,10 @@ export const DEFAULT_SETTINGS = {
   // 'windows' leaves Tab alone so it keeps its normal browser focus-move
   // behavior instead of being hijacked for everyone regardless of platform.
   keyboardLayout: detectDefaultKeyboardLayout(),
+  // When on, node boxes render with no border (relying on the background
+  // color + drop shadow alone for definition) — a flatter "bubble" look as
+  // an alternative to the default outlined style.
+  nodeBorderless: false,
 };
 
 export function loadSettings() {
@@ -91,4 +95,5 @@ export function applySettings(settings) {
   root.style.setProperty('--node-bg', settings.nodeBg);
   root.style.setProperty('--accent', settings.accent);
   root.style.setProperty('--accent-dark', settings.accentDark);
+  root.style.setProperty('--node-border-width', settings.nodeBorderless ? '0px' : '1.5px');
 }
