@@ -180,6 +180,11 @@ export function exportMM(root, graphicalLinks, filename = mindmapFilename(root.t
     const extra = [];
     if (n.cloud) extra.push(`<cloud COLOR="${xmlEscape(n.cloud)}"/>`);
     (n.icons || []).forEach((ic) => extra.push(`<icon BUILTIN="${xmlEscape(ic)}"/>`));
+    // Also non-standard, same spirit as CHECKBOX above — real FreeMind has
+    // no equivalent (its own image support works through externally
+    // referenced files, not an inline element like this), so the whole
+    // data URL round-trips only through this app's own .mm export/import.
+    if (n.image) extra.push(`<image DATA="${xmlEscape(n.image)}" W="${n.imageW || 0}" H="${n.imageH || 0}"/>`);
     (linksByFrom.get(n.id) || []).forEach((link) => {
       const arrows = link.arrows || 'end';
       const startArrow = arrows === 'both' ? 'Default' : 'None';
@@ -200,9 +205,10 @@ export function exportMM(root, graphicalLinks, filename = mindmapFilename(root.t
 
 // Imports a FreeMind .mm file (or any map following the same simple
 // <map><node TEXT="..." POSITION="left|right">...</node></map> schema).
-// Reads IDs, LINK, <cloud>, <icon BUILTIN>, and <arrowlink> so clouds,
-// hyperlinks, icons, and graphical links all round-trip through this app,
-// and degrade gracefully when opening a real FreeMind file.
+// Reads IDs, LINK, <cloud>, <icon BUILTIN>, <image> (see exportMM), and
+// <arrowlink> so clouds, hyperlinks, icons, images, and graphical links all
+// round-trip through this app, and degrade gracefully when opening a real
+// FreeMind file (which just won't have any of those non-standard bits).
 export function parseMM(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.querySelector('parsererror')) {
@@ -229,6 +235,7 @@ export function parseMM(xmlText) {
     const side = isRootNode ? null : (isTop ? (position === 'left' ? 'left' : 'right') : inheritedSide);
 
     const cloudEl = el.querySelector(':scope > cloud');
+    const imageEl = el.querySelector(':scope > image');
     const iconEls = Array.from(el.children).filter((c) => c.tagName === 'icon');
     const arrowEls = Array.from(el.children).filter((c) => c.tagName === 'arrowlink');
     arrowEls.forEach((ae) => {
@@ -256,6 +263,9 @@ export function parseMM(xmlText) {
       cloud: cloudEl ? (cloudEl.getAttribute('COLOR') || '#c9d6e3') : null,
       link: el.getAttribute('LINK') || null,
       checkbox,
+      image: imageEl ? imageEl.getAttribute('DATA') || null : null,
+      imageW: imageEl ? Number(imageEl.getAttribute('W')) || null : null,
+      imageH: imageEl ? Number(imageEl.getAttribute('H')) || null : null,
       icons: iconEls
         .map((ie) => {
           const b = ie.getAttribute('BUILTIN') || '';
@@ -470,6 +480,14 @@ async function buildMapSVGMarkup(state) {
     el.classList.remove('selected', 'link-source');
   });
   nodesClone.querySelectorAll('[contenteditable]').forEach((el) => el.removeAttribute('contenteditable'));
+  // .innerHTML serializes with plain HTML syntax — a void element like
+  // <img> comes out as `<img ...>` with no closing slash, which is fine in
+  // HTML but not well-formed XML, and this whole fragment is about to be
+  // parsed as XML inside <foreignObject> below. XMLSerializer self-closes
+  // it (`<img .../>`) instead, since it has no HTML-void-element concept —
+  // it just serializes the DOM tree structure as-is.
+  const serializer = new XMLSerializer();
+  const nodesXML = Array.from(nodesClone.children).map((el) => serializer.serializeToString(el)).join('');
 
   const markup = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
@@ -479,7 +497,7 @@ async function buildMapSVGMarkup(state) {
     `<g transform="translate(${dx}, ${dy})">${clouds}${edges}${glinks}</g>`,
     `<foreignObject x="0" y="0" width="${width}" height="${height}">`,
     `<div xmlns="http://www.w3.org/1999/xhtml" style="position:relative; width:${width}px; height:${height}px;">`,
-    `<div style="position:absolute; left:${dx}px; top:${dy}px;">${nodesClone.innerHTML}</div>`,
+    `<div style="position:absolute; left:${dx}px; top:${dy}px;">${nodesXML}</div>`,
     `</div>`,
     `</foreignObject>`,
     `</svg>`,

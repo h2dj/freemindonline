@@ -5,6 +5,7 @@ import {
   flipRootChildSide, canFlipRootChildSide, canInsertParentAbove, insertParentAbove,
   setCloud, setLink, addIcon, removeLastIcon, clearIcons, collectSubtreeIds,
   addCheckbox, removeCheckbox, toggleCheckboxChecked, collectCheckboxNodes, ancestorPathText,
+  setImage, removeImage,
   toPlain, fromPlain, countDescendants,
 } from './model.js';
 import { render, nextVisibleSameSide } from './render.js';
@@ -75,6 +76,10 @@ let checklistVisibilityOverride = null;
 // toggled via the "🧭" button next to it. Same app-wide, not-per-tab, not
 // persisted treatment as the visibility override above.
 let checklistCopyIncludePath = true;
+// Which node ctx.pickImage() opened the hidden file picker for — the
+// picker's own 'change' event doesn't otherwise know which node the user
+// was acting on when they chose "🖼 이미지 추가" from the context menu.
+let pendingImageNodeId = null;
 
 function makeHistory() {
   return createHistory(
@@ -367,6 +372,78 @@ async function copyChecklistToClipboard() {
   } catch (e) {
     console.error(e);
     toast('클립보드 복사에 실패했습니다.');
+  }
+}
+
+// ---------- Image upload ----------
+// The longest side a stored image is ever downscaled to before being kept
+// as a data URL — generous headroom above the ~200×140 on-canvas thumbnail
+// (imageDisplaySize in model.js) so it still looks sharp there and in a 2x
+// PNG export, without keeping a full-resolution camera photo (often
+// several MB) around bloating autosave/JSON export.
+const IMAGE_UPLOAD_MAX_DIM = 800;
+// A generous safety net on top of the downscaling above — catches
+// pathological cases (a huge, highly-detailed PNG that doesn't compress
+// well even at 800px) before they can blow the app's localStorage quota.
+const IMAGE_MAX_DATA_URL_LENGTH = 3 * 1024 * 1024;
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다.'));
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('이미지를 불러오지 못했습니다.'));
+    img.src = src;
+  });
+}
+
+// Downscales (never upscales) `file` to fit within IMAGE_UPLOAD_MAX_DIM on
+// its longer side and re-encodes it through a canvas — PNGs stay PNG (to
+// keep transparency), everything else becomes a JPEG. Returns
+// { dataUrl, w, h } with w/h being the size actually stored, i.e. what
+// model.js's imageDisplaySize scales down from.
+async function downscaleImageForStorage(file) {
+  const original = await readFileAsDataURL(file);
+  const img = await loadImageElement(original);
+  const scale = Math.min(1, IMAGE_UPLOAD_MAX_DIM / img.naturalWidth, IMAGE_UPLOAD_MAX_DIM / img.naturalHeight);
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+  const dataUrl = canvas.toDataURL(mime, mime === 'image/jpeg' ? 0.85 : undefined);
+  return { dataUrl, w, h };
+}
+
+async function handleImageFileChosen(file) {
+  const id = pendingImageNodeId;
+  pendingImageNodeId = null;
+  if (!id || !file) return;
+  if (!file.type.startsWith('image/')) {
+    toast('이미지 파일만 추가할 수 있습니다.');
+    return;
+  }
+  try {
+    const { dataUrl, w, h } = await downscaleImageForStorage(file);
+    if (dataUrl.length > IMAGE_MAX_DATA_URL_LENGTH) {
+      toast('이미지가 너무 커서 추가하지 못했습니다.');
+      return;
+    }
+    ctx.setImage(id, dataUrl, w, h);
+    toast('이미지를 추가했습니다.');
+  } catch (e) {
+    console.error(e);
+    toast('이미지를 추가하지 못했습니다.');
   }
 }
 
@@ -819,6 +896,34 @@ const ctx = {
     rerenderAll();
   },
 
+  // ---------- Images ----------
+  // Opens the OS file picker (via the hidden #image-file-input) for `id`.
+  // The actual read + downscale + store happens asynchronously in that
+  // input's 'change' handler once a file is actually chosen — see
+  // downscaleImageForStorage and its wiring near the bottom of this file —
+  // since this method itself just needs to return right away so the
+  // context menu that called it can close normally.
+  pickImage(id) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    pendingImageNodeId = id;
+    document.getElementById('image-file-input').click();
+  },
+  setImage(id, dataUrl, w, h) {
+    const n = findNode(state.root, id);
+    if (!n) return;
+    history.push();
+    setImage(n, dataUrl, w, h);
+    rerenderAll();
+  },
+  removeImage(id) {
+    const n = findNode(state.root, id);
+    if (!n || !n.image) return;
+    history.push();
+    removeImage(n);
+    rerenderAll();
+  },
+
   // ---------- Chapter 3: graphical links ----------
   startLinkMode(id) {
     state.linkSourceId = id;
@@ -930,6 +1035,9 @@ const ctx = {
       items.push(['🗑 마지막 아이콘 제거', () => this.removeLastIcon(id)]);
       items.push(['🗑 아이콘 모두 제거', () => this.clearIcons(id)]);
     }
+
+    items.push([n.image ? '🖼 이미지 바꾸기' : '🖼 이미지 추가', () => this.pickImage(id)]);
+    if (n.image) items.push(['🗑 이미지 제거', () => this.removeImage(id)]);
 
     if (state.linkSourceId === id) items.push(['↗ 그래픽 링크 시작 취소', () => this.cancelLinkMode()]);
     else if (state.linkSourceId) items.push(['↗ 여기로 그래픽 링크 연결', () => this.completeLinkMode(id)]);
@@ -1218,6 +1326,12 @@ document.getElementById('md-input').onchange = (e) => {
   };
   reader.readAsText(file);
   e.target.value = '';
+};
+
+document.getElementById('image-file-input').onchange = (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  handleImageFileChosen(file);
 };
 
 document.querySelectorAll('#color-group .swatch').forEach((btn) => {

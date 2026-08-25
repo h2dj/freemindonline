@@ -6,6 +6,7 @@
 // This keeps layout.js's math and the actual DOM output pixel-consistent.
 
 import { renderIconToken } from './icons.js';
+import { imageDisplaySize } from './model.js';
 
 let probe = null;
 
@@ -23,6 +24,18 @@ export function measureNode(node) {
   el.classList.toggle('root-box', !!node.isRoot);
   el.style.width = '';
   el.innerHTML = '';
+
+  if (node.image) {
+    // width/height attributes (not just CSS) so the box has its final size
+    // immediately, without waiting for the data URL to actually decode —
+    // see the `image` field's doc comment in model.js.
+    const { w, h } = imageDisplaySize(node);
+    const img = document.createElement('img');
+    img.className = 'node-image';
+    img.width = w;
+    img.height = h;
+    el.appendChild(img);
+  }
 
   if (node.checkbox != null) {
     const cb = document.createElement('span');
