@@ -9,6 +9,7 @@
   --accent-dark: #1d4ed8;
   --node-bg: #ffffff;
   --node-border: #c7cdd6;
+  --node-border-width: 1.5px;
   --edge: #94a3b8;
   --node-font-size: 14px;
 }
@@ -525,7 +526,7 @@ body {
   max-width: 220px;
   transform: translate(-50%, -50%);
   background: var(--node-bg);
-  border: 1.5px solid var(--node-border);
+  border: var(--node-border-width) solid var(--node-border);
   border-radius: 10px;
   padding: 7px 13px;
   font-size: var(--node-font-size);
