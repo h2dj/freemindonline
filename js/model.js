@@ -2,7 +2,7 @@
 // A node looks like:
 // { id, text, children: [Node], collapsed, color, side: 'left'|'right'|null,
 //   parent: Node|null, isRoot, cloud: colorString|null, link: string|null,
-//   icons: string[] }
+//   icons: string[], image: dataURL|null, imageW: number|null, imageH: number|null }
 // `parent` is a live back-reference used only at runtime; it is stripped
 // when serializing (see toPlain/fromPlain) so the tree stays JSON-safe.
 
@@ -25,6 +25,17 @@ export function createNode(text, parent, side) {
     icons: [],
     // null = no checkbox on this node; true/false = checkbox present, checked or not.
     checkbox: null,
+    // An uploaded image, stored inline as a data URL (see setImage) so it
+    // travels with the document (JSON save, autosave) with no external
+    // file reference to keep track of. imageW/imageH are the image's own
+    // natural pixel size, captured once at upload time — render.js and
+    // measure.js both need a size *before* the browser has necessarily
+    // decoded the data URL, so a derived display size (see
+    // imageDisplaySize) can be computed synchronously from these instead
+    // of waiting on the image to load.
+    image: null,
+    imageW: null,
+    imageH: null,
   };
 }
 
@@ -221,6 +232,39 @@ export function clearIcons(node) {
   node.icons.length = 0;
 }
 
+// ---------- Images ----------
+
+// The biggest an image is ever actually drawn on the canvas, regardless of
+// the uploaded photo's real resolution — keeps a single huge upload from
+// producing a giant node box. Shared by render.js/measure.js (via
+// imageDisplaySize below) so the node's measured size and its painted size
+// always agree.
+export const IMAGE_DISPLAY_MAX_W = 200;
+export const IMAGE_DISPLAY_MAX_H = 140;
+
+export function setImage(node, dataUrl, naturalW, naturalH) {
+  node.image = dataUrl;
+  node.imageW = naturalW || null;
+  node.imageH = naturalH || null;
+}
+
+export function removeImage(node) {
+  node.image = null;
+  node.imageW = null;
+  node.imageH = null;
+}
+
+// Scales node.imageW/imageH down (never up) to fit within the display cap
+// above, preserving aspect ratio. Falls back to the cap itself if the
+// natural size wasn't recorded for some reason (e.g. a hand-edited JSON
+// file), rather than rendering a 0×0 image.
+export function imageDisplaySize(node) {
+  const w = node.imageW, h = node.imageH;
+  if (!w || !h) return { w: IMAGE_DISPLAY_MAX_W, h: IMAGE_DISPLAY_MAX_H };
+  const scale = Math.min(1, IMAGE_DISPLAY_MAX_W / w, IMAGE_DISPLAY_MAX_H / h);
+  return { w: Math.max(1, Math.round(w * scale)), h: Math.max(1, Math.round(h * scale)) };
+}
+
 // ---------- Checkboxes / checklist ----------
 
 export function addCheckbox(node) {
@@ -317,6 +361,9 @@ export function toPlain(node) {
     link: node.link || null,
     icons: node.icons.slice(),
     checkbox: typeof node.checkbox === 'boolean' ? node.checkbox : null,
+    image: node.image || null,
+    imageW: node.imageW || null,
+    imageH: node.imageH || null,
     children: node.children.map(toPlain),
   };
 }
@@ -335,6 +382,9 @@ export function fromPlain(plain, parent = null) {
     link: plain.link || null,
     icons: Array.isArray(plain.icons) ? plain.icons.slice() : [],
     checkbox: typeof plain.checkbox === 'boolean' ? plain.checkbox : null,
+    image: plain.image || null,
+    imageW: plain.imageW || null,
+    imageH: plain.imageH || null,
   };
   node.children = (plain.children || []).map((c) => fromPlain(c, node));
   return node;

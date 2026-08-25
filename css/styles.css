@@ -577,6 +577,17 @@ body {
   font-size: 1em;
 }
 
+.node-image {
+  display: block;
+  max-width: 100%;
+  height: auto; /* keep aspect ratio if the node box's own max-width ever
+                   has to squeeze the image below its w/h attributes */
+  border-radius: 6px;
+  margin: 0 0 6px;
+  object-fit: contain;
+  pointer-events: none; /* clicks fall through to the node box beneath it */
+}
+
 .node-checkbox {
   display: inline-block;
   margin-right: 4px;

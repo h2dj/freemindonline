@@ -1,6 +1,6 @@
 import { computeLayout } from './layout.js';
 import { measureNode } from './measure.js';
-import { findNode } from './model.js';
+import { findNode, imageDisplaySize } from './model.js';
 import { renderIconToken } from './icons.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -260,6 +260,17 @@ function drawNodes(state) {
     div.style.width = n.w + 'px';
     if (n.color) div.style.background = n.color;
     div.dataset.id = n.id;
+
+    if (n.image) {
+      const { w, h } = imageDisplaySize(n);
+      const img = document.createElement('img');
+      img.className = 'node-image';
+      img.src = n.image;
+      img.width = w;
+      img.height = h;
+      img.alt = '';
+      div.appendChild(img);
+    }
 
     if (n.checkbox != null) {
       const cb = document.createElement('span');
