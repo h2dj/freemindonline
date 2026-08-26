@@ -23,6 +23,18 @@ export function setupCanvasInteractions(state, ctx) {
 
   let panDrag = null;
   let nodeDrag = null;
+  let glinkCurveDrag = null;
+
+  // Canvas (client) coordinates -> world coordinates, i.e. the same space
+  // node x/y live in — accounts for the current pan/zoom, same math the
+  // pinch-zoom anchor below already uses.
+  function toWorld(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - state.pan.x) / state.zoom,
+      y: (clientY - rect.top - state.pan.y) / state.zoom,
+    };
+  }
 
   function clearDropHighlight() {
     document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
@@ -36,6 +48,13 @@ export function setupCanvasInteractions(state, ctx) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
+    const handleEl = e.target.closest('.glink-handle');
+    if (handleEl) {
+      const linkId = handleEl.dataset.linkId;
+      if (ctx.beginGraphicalLinkCurveDrag(linkId)) glinkCurveDrag = { id: linkId };
+      e.preventDefault();
+      return;
+    }
     if (e.target.closest('.glink-hit')) return; // handled on click; no pan/drag from a link
     // Handled on click, same as .glink-hit above — and for the same reason
     // that matters here beyond just "no pan/drag from this element":
@@ -65,7 +84,10 @@ export function setupCanvasInteractions(state, ctx) {
   });
 
   window.addEventListener('mousemove', (e) => {
-    if (panDrag) {
+    if (glinkCurveDrag) {
+      const w = toWorld(e.clientX, e.clientY);
+      ctx.dragGraphicalLinkCurve(glinkCurveDrag.id, w.x, w.y);
+    } else if (panDrag) {
       state.pan.x = panDrag.ox + (e.clientX - panDrag.startX);
       state.pan.y = panDrag.oy + (e.clientY - panDrag.startY);
       ctx.applyTransform();
@@ -90,6 +112,7 @@ export function setupCanvasInteractions(state, ctx) {
     }
     panDrag = null;
     nodeDrag = null;
+    glinkCurveDrag = null;
     nodesLayer.classList.remove('dragging-node');
   });
 
@@ -194,6 +217,7 @@ export function setupCanvasInteractions(state, ctx) {
     pinch = null;
     panDrag = null;
     nodeDrag = null;
+    glinkCurveDrag = null;
     clearDropHighlight();
     nodesLayer.classList.remove('dragging-node');
   }
@@ -216,6 +240,14 @@ export function setupCanvasInteractions(state, ctx) {
     }
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
+
+    const handleEl = t.target.closest?.('.glink-handle');
+    if (handleEl) {
+      e.preventDefault();
+      const linkId = handleEl.dataset.linkId;
+      if (ctx.beginGraphicalLinkCurveDrag(linkId)) glinkCurveDrag = { id: linkId };
+      return;
+    }
 
     const linkBadge = t.target.closest?.('.link-badge');
     if (linkBadge) {
@@ -276,8 +308,15 @@ export function setupCanvasInteractions(state, ctx) {
   }, { passive: false });
 
   canvas.addEventListener('touchmove', (e) => {
-    if (!pinch && !panDrag && !nodeDrag) return; // e.g. actively editing text — let it scroll/select natively
+    if (!pinch && !panDrag && !nodeDrag && !glinkCurveDrag) return; // e.g. actively editing text — let it scroll/select natively
     e.preventDefault();
+
+    if (glinkCurveDrag && e.touches.length === 1) {
+      const t = e.touches[0];
+      const w = toWorld(t.clientX, t.clientY);
+      ctx.dragGraphicalLinkCurve(glinkCurveDrag.id, w.x, w.y);
+      return;
+    }
 
     if (pinch && e.touches.length === 2) {
       const [t0, t1] = e.touches;
@@ -339,6 +378,7 @@ export function setupCanvasInteractions(state, ctx) {
     }
     panDrag = null;
     nodeDrag = null;
+    glinkCurveDrag = null;
     nodesLayer.classList.remove('dragging-node');
   });
 

@@ -202,15 +202,22 @@ function drawGraphicalLinks(root, links, selectedLinkId) {
     const to = findNode(root, link.toId);
     if (!from || !to || from.x == null || to.x == null) return; // hidden or stale
     const color = link.color || DEFAULT_LINK_COLOR;
-    // Bow (the curve's control point) is still computed from the node
-    // centers, same as before, so the arc's shape doesn't change — only
-    // the two endpoints get pulled back to each node's edge afterward.
     const cx0 = from.x, cy0 = from.y, cx1 = to.x, cy1 = to.y;
     const mx = (cx0 + cx1) / 2, my = (cy0 + cy1) / 2;
     const dx = cx1 - cx0, dy = cy1 - cy0;
     const len = Math.hypot(dx, dy) || 1;
-    const bow = Math.min(70, len * 0.18);
-    const cx = mx + (-dy / len) * bow, cy = my + (dx / len) * bow;
+    // Unit tangent/perpendicular of the straight from->to line — the basis
+    // link.curve's offsets are expressed in, so a custom curve keeps its
+    // shape (not just its endpoints) as the nodes it connects move around.
+    const ux = dx / len, uy = dy / len;
+    const px = -uy, py = ux;
+    // Auto-bow default (a gentle bulge that only grows for longer links,
+    // capped so it never looks exaggerated) unless the user dragged the
+    // curve's handle to a specific spot — see ctx.setGraphicalLinkCurve.
+    const perp = link.curve ? link.curve.perp : Math.min(70, len * 0.18);
+    const along = link.curve ? link.curve.along : 0;
+    const cx = mx + px * perp + ux * along;
+    const cy = my + py * perp + uy * along;
     // Quadratic Bezier tangent at each endpoint points toward the control
     // point, so that's also the direction each node's box edge is found
     // along — this keeps the trimmed curve meeting the box at the same
@@ -227,14 +234,30 @@ function drawGraphicalLinks(root, links, selectedLinkId) {
     hit.setAttribute('class', 'glink-hit');
     g.appendChild(hit);
 
+    const selected = link.id === selectedLinkId;
     const visible = document.createElementNS(SVG_NS, 'path');
     visible.setAttribute('d', d);
-    visible.setAttribute('class', 'glink' + (link.id === selectedLinkId ? ' selected' : ''));
+    visible.setAttribute('class', 'glink' + (selected ? ' selected' : ''));
     visible.style.stroke = color;
     const arrows = link.arrows || 'end';
     if (arrows !== 'none') visible.setAttribute('marker-end', `url(#${markerFor(color)})`);
     if (arrows === 'both') visible.setAttribute('marker-start', `url(#${markerFor(color)})`);
     g.appendChild(visible);
+
+    // A draggable handle at the curve's control point, only shown once the
+    // link is selected — see interactions.js's glink-handle drag handling
+    // (ctx.setGraphicalLinkCurve). Kept as a plain child of `g` rather than
+    // sharing a class with `.glink-hit`/`.glink` so it can have its own
+    // mousedown/touchstart behavior without touching those.
+    if (selected) {
+      const handle = document.createElementNS(SVG_NS, 'circle');
+      handle.setAttribute('class', 'glink-handle');
+      handle.setAttribute('cx', cx);
+      handle.setAttribute('cy', cy);
+      handle.setAttribute('r', 6);
+      handle.dataset.linkId = link.id;
+      g.appendChild(handle);
+    }
 
     svg.appendChild(g);
   });

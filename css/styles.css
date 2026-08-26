@@ -519,6 +519,21 @@ body {
   cursor: pointer;
 }
 
+/* Drag handle for reshaping a selected graphical link's curve (see
+   interactions.js) — a filled dot with a light halo so it reads as
+   grabbable and stands out against the curve underneath it. */
+.glink-handle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  cursor: grab;
+  touch-action: none;
+  pointer-events: all; /* #glinks disables pointer events by default (see below), same as .glink-hit already overrides */
+}
+.glink-handle:active {
+  cursor: grabbing;
+}
+
 /* ---------- Node ---------- */
 .node-box {
   position: absolute;
