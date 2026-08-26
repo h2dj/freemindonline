@@ -948,7 +948,7 @@ const ctx = {
   completeLinkMode(targetId) {
     if (!state.linkSourceId || state.linkSourceId === targetId) { this.cancelLinkMode(); return; }
     history.push();
-    state.graphicalLinks.push({ id: makeId(), fromId: state.linkSourceId, toId: targetId, color: null, arrows: 'end' });
+    state.graphicalLinks.push({ id: makeId(), fromId: state.linkSourceId, toId: targetId, color: null, arrows: 'end', curve: null });
     state.linkSourceId = null;
     rerenderAll();
   },
@@ -966,8 +966,14 @@ const ctx = {
     const items = [
       ['🎨 색상 변경', () => this.cycleLinkColor(id)],
       ['↔ 화살표 스타일 변경', () => this.cycleLinkArrows(id)],
-      ['🗑 링크 삭제', () => this.deleteGraphicalLink(id)],
     ];
+    // The curve's handle (dragged directly on the canvas — see
+    // render.js/interactions.js) only shows up once the link is selected,
+    // which this menu already does above — but a menu entry to undo a bad
+    // drag is worth having since there's no other obvious way back to the
+    // automatic curve.
+    if (link.curve) items.push(['↺ 곡선 초기화', () => this.resetGraphicalLinkCurve(id)]);
+    items.push(['🗑 링크 삭제', () => this.deleteGraphicalLink(id)]);
     items.forEach(([label, fn]) => {
       const btn = document.createElement('button');
       btn.textContent = label;
@@ -1003,6 +1009,49 @@ const ctx = {
     history.push();
     state.graphicalLinks.splice(idx, 1);
     if (state.selectedLinkId === id) state.selectedLinkId = null;
+    rerenderAll();
+  },
+  // Dragging the curve's handle (see interactions.js/render.js's
+  // .glink-handle) is one undo step for the whole gesture, not one per
+  // pixel moved — history.push() happens once here, at mousedown/
+  // touchstart, before any change; dragGraphicalLinkCurve below just
+  // mutates state.graphicalLinks in place on every move. Returns false
+  // (and pushes nothing) if the link vanished between selecting it and
+  // grabbing the handle, so interactions.js knows not to start a drag.
+  beginGraphicalLinkCurveDrag(id) {
+    const link = state.graphicalLinks.find((l) => l.id === id);
+    if (!link) return false;
+    history.push();
+    return true;
+  },
+  // worldX/worldY: the pointer's current position in canvas world space
+  // (interactions.js's toWorld — already pan/zoom-adjusted). Re-expresses
+  // that point as (perp, along) offsets from the straight from->to
+  // midpoint, in that line's own tangent/perpendicular basis, so the
+  // custom curve keeps its shape as the connected nodes move around
+  // instead of the control point staying pinned to old world coordinates.
+  dragGraphicalLinkCurve(id, worldX, worldY) {
+    const link = state.graphicalLinks.find((l) => l.id === id);
+    if (!link) return;
+    const from = findNode(state.root, link.fromId);
+    const to = findNode(state.root, link.toId);
+    if (!from || !to) return;
+    const mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const px = -uy, py = ux;
+    const relX = worldX - mx, relY = worldY - my;
+    link.curve = { perp: relX * px + relY * py, along: relX * ux + relY * uy };
+    render(state); // cheap live feedback during the drag — see applyTransform's panSaveTimer for why not rerenderAll()/saveTabs() on every move
+    clearTimeout(panSaveTimer);
+    panSaveTimer = setTimeout(saveTabs, 500);
+  },
+  resetGraphicalLinkCurve(id) {
+    const link = state.graphicalLinks.find((l) => l.id === id);
+    if (!link || !link.curve) return;
+    history.push();
+    link.curve = null;
     rerenderAll();
   },
 

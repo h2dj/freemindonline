@@ -190,7 +190,16 @@ export function exportMM(root, graphicalLinks, filename = mindmapFilename(root.t
       const startArrow = arrows === 'both' ? 'Default' : 'None';
       const endArrow = arrows === 'none' ? 'None' : 'Default';
       const colorAttr = link.color ? ` COLOR="${xmlEscape(link.color)}"` : '';
-      extra.push(`<arrowlink DESTINATION="${xmlEscape(link.toId)}" STARTARROW="${startArrow}" ENDARROW="${endArrow}"${colorAttr}/>`);
+      // CURVE_PERP/CURVE_ALONG are also non-standard (deliberately not real
+      // FreeMind's STARTINCLINATION/ENDINCLINATION — those describe a
+      // *cubic* curve with one control point per end, while this app's
+      // curve is a simpler single-control-point quadratic, so reusing the
+      // real attribute names would just be misleading) — only this app's
+      // own .mm export/import understands them.
+      const curveAttr = link.curve
+        ? ` CURVE_PERP="${link.curve.perp}" CURVE_ALONG="${link.curve.along}"`
+        : '';
+      extra.push(`<arrowlink DESTINATION="${xmlEscape(link.toId)}" STARTARROW="${startArrow}" ENDARROW="${endArrow}"${colorAttr}${curveAttr}/>`);
     });
 
     const childrenXML = extra.join('') + n.children.map((c) => nodeToXML(c, n.isRoot)).join('');
@@ -246,7 +255,12 @@ export function parseMM(xmlText) {
       let arrows = 'end';
       if (startArrow !== 'none' && endArrow !== 'none') arrows = 'both';
       else if (startArrow === 'none' && endArrow === 'none') arrows = 'none';
-      rawLinks.push({ fromId: id, toId: dest, color: ae.getAttribute('COLOR') || null, arrows });
+      const perpAttr = ae.getAttribute('CURVE_PERP');
+      const alongAttr = ae.getAttribute('CURVE_ALONG');
+      const curve = perpAttr != null && alongAttr != null
+        ? { perp: Number(perpAttr) || 0, along: Number(alongAttr) || 0 }
+        : null;
+      rawLinks.push({ fromId: id, toId: dest, color: ae.getAttribute('COLOR') || null, arrows, curve });
     });
 
     const checkboxAttr = el.getAttribute('CHECKBOX');
@@ -457,6 +471,19 @@ function runtimeCSSOverrides() {
   return `:root { ${decls} }`;
 }
 
+// Wraps raw CSS text (from the file on disk, or the runtime overrides
+// above) in a CDATA section before it goes into an XML <style> element —
+// unlike an HTML document, this exported SVG is parsed as XML, so a `<` or
+// `&` anywhere in the CSS text — even inside a comment, e.g. one that
+// happens to mention an HTML tag like <body> — would otherwise be read as
+// markup and can desync the whole document's tag structure. `]]>` is the
+// one sequence CDATA itself can't contain; escaping it (the standard XML
+// trick: split it into two adjacent CDATA sections) is only a theoretical
+// concern for actual CSS but costs nothing to handle.
+function cdata(css) {
+  return `<![CDATA[${css.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
+}
+
 async function buildMapSVGMarkup(state) {
   const bounds = computeContentBounds(state);
   const MARGIN = 40;
@@ -470,7 +497,13 @@ async function buildMapSVGMarkup(state) {
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#f4f6f9';
   const clouds = document.getElementById('clouds').innerHTML;
   const edges = document.getElementById('edges').innerHTML;
-  const glinks = document.getElementById('glinks').innerHTML;
+  // Same "strip interaction-only state" treatment as nodesClone below — a
+  // selected link's highlight color and its curve-drag handle are editing
+  // affordances, not part of the map itself.
+  const glinksClone = document.getElementById('glinks').cloneNode(true);
+  glinksClone.querySelectorAll('.glink.selected').forEach((el) => el.classList.remove('selected'));
+  glinksClone.querySelectorAll('.glink-handle').forEach((el) => el.remove());
+  const glinks = glinksClone.innerHTML;
 
   // A plain snapshot of the current nodes: strip interaction-only state
   // (selection outline, in-progress edit) that shouldn't appear in an
@@ -496,8 +529,8 @@ async function buildMapSVGMarkup(state) {
 
   const markup = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
-    `<style>${css}</style>`,
-    `<style>${overrides}</style>`,
+    `<style>${cdata(css)}</style>`,
+    `<style>${cdata(overrides)}</style>`,
     `<rect x="0" y="0" width="${width}" height="${height}" fill="${bg}"/>`,
     `<g transform="translate(${dx}, ${dy})">${clouds}${edges}${glinks}</g>`,
     `<foreignObject x="0" y="0" width="${width}" height="${height}">`,
