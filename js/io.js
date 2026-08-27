@@ -147,6 +147,81 @@ export function parseJSONFile(text) {
   return deserializeDoc(JSON.parse(text));
 }
 
+// ---------- Shareable link (no server/account needed) ----------
+// Packs the whole document into the URL's hash fragment so pasting the
+// link into a chat or email reopens the exact same map, no file attachment
+// or sign-in required. A hash fragment is never sent in the HTTP request
+// (only ? query strings are) — the browser keeps it entirely client-side —
+// so there's no server URL-length limit to worry about; the only real
+// constraint is whether wherever the user pastes the link (a chat client,
+// an email body) mangles a very long one, which buildShareLink flags via
+// `tooLong` for the caller to warn about, not something to block on.
+
+const SHARE_HASH_PREFIX = '#share=';
+// A heads-up threshold, not a hard cutoff — most of the length budget goes
+// unused by the browser itself. Maps with embedded images (already-compressed
+// JPEG/PNG data) will very likely cross it; that's expected, not a bug.
+const SHARE_LINK_WARN_LENGTH = 8000;
+
+function toBase64Url(bytes) {
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(str) {
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// CompressionStream isn't in every browser yet (Safari added it in 16.4) —
+// gzip helps a lot for a plain text-heavy map (JSON compresses well) and
+// barely at all for one with embedded images (already-compressed JPEG/PNG
+// data doesn't shrink further), but either way a browser without it just
+// gets the plain, uncompressed link instead of the feature failing outright.
+async function gzipCompress(text) {
+  if (typeof CompressionStream === 'undefined') return null;
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function gzipDecompress(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new TextDecoder().decode(await new Response(stream).arrayBuffer());
+}
+
+// Returns { url, length, tooLong }.
+export async function buildShareLink(root, graphicalLinks) {
+  const json = JSON.stringify(serializeDoc(root, graphicalLinks));
+  const compressed = await gzipCompress(json);
+  const payload = compressed
+    ? 'z' + toBase64Url(compressed)
+    : 'r' + toBase64Url(new TextEncoder().encode(json));
+  const base = location.href.split('#')[0];
+  const url = `${base}${SHARE_HASH_PREFIX}${payload}`;
+  return { url, length: url.length, tooLong: url.length > SHARE_LINK_WARN_LENGTH };
+}
+
+// Reads a document back out of a `#share=...` hash (see buildShareLink
+// above). Returns null for a hash that isn't one of our share links at all
+// (e.g. no hash, or some other fragment) so app startup can fall through
+// to its normal autosave-restore path instead of treating that as an
+// error; throws only once it's committed to this being a share link that
+// then turns out to be corrupt, so the caller can tell those two cases
+// apart and only surface a toast for the latter.
+export async function parseShareLink(hash) {
+  if (!hash || !hash.startsWith(SHARE_HASH_PREFIX)) return null;
+  const payload = hash.slice(SHARE_HASH_PREFIX.length);
+  const kind = payload[0];
+  const bytes = fromBase64Url(payload.slice(1));
+  const json = kind === 'z' ? await gzipDecompress(bytes) : new TextDecoder().decode(bytes);
+  return deserializeDoc(JSON.parse(json));
+}
+
 function xmlEscape(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
