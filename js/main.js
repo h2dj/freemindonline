@@ -13,6 +13,7 @@ import { setupCanvasInteractions, setupKeyboard, startEditImpl } from './interac
 import {
   autosaveTabs, loadTabs, downloadJSON, buildJSONFile, parseJSONFile, exportMM, parseMM,
   exportMarkdown, parseMarkdown, checklistToMarkdown, exportChecklistCSV, exportPNG, printMap,
+  buildShareLink, parseShareLink,
 } from './io.js';
 import { createHistory } from './undo.js';
 import {
@@ -352,20 +353,15 @@ function renderTabBar() {
   });
 }
 
-// Copies the current checklist as a flat Notion/GitHub-style Markdown task
-// list, so it can be pasted straight into Notion (or any other
-// markdown-aware target) as a matching set of to-do blocks. Prefers the
-// async Clipboard API; falls back to the classic hidden-textarea +
-// execCommand('copy') trick for contexts where that API is missing or
-// blocked, since this whole app otherwise avoids depending on it working.
-async function copyChecklistToClipboard() {
-  const nodes = collectCheckboxNodes(state.root);
-  if (!nodes.length) return;
-  const text = checklistToMarkdown(nodes, { includePath: checklistCopyIncludePath });
+// Prefers the async Clipboard API; falls back to the classic hidden-
+// textarea + execCommand('copy') trick for contexts where that API is
+// missing or blocked, since this whole app otherwise avoids depending on
+// it working. Returns whether the copy actually succeeded so callers can
+// pick their own success/failure wording.
+async function copyTextToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast('체크리스트를 마크다운으로 복사했습니다.');
-    return;
+    return true;
   } catch (e) {
     // fall through to the legacy fallback below
   }
@@ -378,11 +374,22 @@ async function copyChecklistToClipboard() {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    toast('체크리스트를 마크다운으로 복사했습니다.');
+    return true;
   } catch (e) {
     console.error(e);
-    toast('클립보드 복사에 실패했습니다.');
+    return false;
   }
+}
+
+// Copies the current checklist as a flat Notion/GitHub-style Markdown task
+// list, so it can be pasted straight into Notion (or any other
+// markdown-aware target) as a matching set of to-do blocks.
+async function copyChecklistToClipboard() {
+  const nodes = collectCheckboxNodes(state.root);
+  if (!nodes.length) return;
+  const text = checklistToMarkdown(nodes, { includePath: checklistCopyIncludePath });
+  const ok = await copyTextToClipboard(text);
+  toast(ok ? '체크리스트를 마크다운으로 복사했습니다.' : '클립보드 복사에 실패했습니다.');
 }
 
 // ---------- Image upload ----------
@@ -786,6 +793,39 @@ const ctx = {
     const body = encodeURIComponent(`"${title}" 마인드맵 파일을 내려받았습니다. 이 메일에 방금 다운로드된 파일을 첨부해서 보내주세요.`);
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
     toast('이 브라우저는 파일 공유를 지원하지 않아 파일을 내려받았습니다. 메일에 첨부해서 보내주세요.');
+  },
+
+  // Unlike shareMap() above (which shares this app's own JSON *file*),
+  // this packs the whole document straight into a URL — see io.js's
+  // buildShareLink — so there's nothing to attach: pasting the link into
+  // any chat/email and opening it reopens the exact same map, with no
+  // server or account involved. Tries the OS share sheet first (nicer on
+  // mobile — the recipient app, contact, etc. is picked right there), and
+  // otherwise just copies the link to the clipboard.
+  async shareMapAsLink() {
+    let built;
+    try {
+      built = await buildShareLink(state.root, state.graphicalLinks);
+    } catch (e) {
+      console.error(e);
+      toast('링크를 만들지 못했습니다.');
+      return;
+    }
+    const title = state.root.text || '중심 주제';
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ url: built.url, title: `마인드맵: ${title}`, text: `"${title}" 마인드맵 링크를 공유합니다.` });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // user cancelled the share sheet
+        // fall through to the clipboard fallback below
+      }
+    }
+    const ok = await copyTextToClipboard(built.url);
+    if (!ok) { toast('클립보드 복사에 실패했습니다.'); return; }
+    toast(built.tooLong
+      ? '링크를 클립보드에 복사했습니다. 지도가 커서 링크가 깁니다 — 일부 메신저에서는 링크가 잘릴 수 있어요.'
+      : '지도를 여는 링크를 클립보드에 복사했습니다.');
   },
 
   // ---------- Chapter 3: clouds ----------
@@ -1299,6 +1339,7 @@ document.getElementById('btn-new-tab').onclick = () => ctx.newTab();
 
 document.getElementById('btn-save').onclick = () => ctx.saveJSON();
 document.getElementById('btn-share').onclick = () => ctx.shareMap();
+document.getElementById('btn-share-link').onclick = () => ctx.shareMapAsLink();
 
 document.getElementById('btn-open').onclick = () => document.getElementById('file-input').click();
 document.getElementById('file-input').onchange = (e) => {
@@ -1499,3 +1540,54 @@ rerenderAll();
 // autosave (which never recorded pan/zoom), still defaults to centered.
 if (state.pan.x !== 0 || state.pan.y !== 0) applyTransform();
 else centerOnRoot();
+
+// A `#share=...` link (see io.js's buildShareLink/ctx.shareMapAsLink) opens
+// the shared map as a brand-new tab, leaving whatever was already open
+// untouched — the two are unrelated documents. Checked once at startup
+// (the normal way a share link arrives: following it opens a fresh tab/
+// navigation) and again on 'hashchange' (pasting or following one into an
+// *already-running* tab is a same-document navigation that never re-runs
+// the top-level script). Strips the hash afterward via window.history (not
+// the bare `history` binding elsewhere in this file — that's this file's
+// own undo/redo instance, a very different thing) so refreshing doesn't
+// reimport the same link over and over, and it doesn't linger as URL-bar
+// clutter.
+async function tryImportShareLink(hash) {
+  if (!hash || !hash.startsWith('#share=')) return;
+  let parsed;
+  try {
+    parsed = await parseShareLink(hash);
+  } catch (e) {
+    console.error(e);
+    toast('공유 링크를 열지 못했습니다 (손상되었거나 지원하지 않는 형식입니다).');
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    return;
+  }
+  if (!parsed) return;
+  const tab = {
+    id: makeId(), root: parsed.root, graphicalLinks: parsed.graphicalLinks,
+    selectedId: parsed.root.id, pan: { x: 0, y: 0 }, zoom: 1, history: makeHistory(),
+  };
+  // Re-checked fresh right here (not a flag set once at page load) so an
+  // edit made in between — e.g. the very first thing on a brand-new
+  // install is renaming the root, *then* someone follows a share link —
+  // isn't silently discarded: only a still-completely-untouched lone tab
+  // gets replaced instead of joined by a new one.
+  const onlyUntouchedBlankTab = tabs.length === 1 && state.root.children.length === 0
+    && state.root.text === '중심 주제' && state.graphicalLinks.length === 0;
+  if (onlyUntouchedBlankTab) {
+    tabs = [tab];
+  } else {
+    const oldTab = tabs.find((t) => t.id === activeTabId);
+    if (oldTab) snapshotStateIntoTab(oldTab);
+    tabs.push(tab);
+  }
+  activeTabId = tab.id;
+  loadTabIntoState(tab);
+  rerenderAll();
+  centerOnRoot();
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  toast('공유된 지도를 새 탭으로 열었습니다.');
+}
+tryImportShareLink(window.location.hash);
+window.addEventListener('hashchange', () => tryImportShareLink(window.location.hash));
